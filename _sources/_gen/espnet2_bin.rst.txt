@@ -20,6 +20,111 @@ aggregate_stats_dirs.py
                             Input directories (default: None)
       --output_dir OUTPUT_DIR
                             Output directory (default: None)
+.. _asr_align.py:
+
+asr_align.py
+~~~~~~~~~~~~
+
+.. code-block:: none
+
+    [nltk_data] Downloading package averaged_perceptron_tagger to
+    [nltk_data]     /home/runner/nltk_data...
+    [nltk_data]   Unzipping taggers/averaged_perceptron_tagger.zip.
+    [nltk_data] Downloading package cmudict to /home/runner/nltk_data...
+    [nltk_data]   Unzipping corpora/cmudict.zip.
+    usage: asr_align.py [-h] [--config CONFIG]
+                        [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
+                        [--ngpu NGPU] [--dtype {float16,float32,float64}]
+                        --asr_train_config ASR_TRAIN_CONFIG --asr_model_file
+                        ASR_MODEL_FILE [--token_type {char,bpe,None}]
+                        [--bpemodel BPEMODEL] [--fs FS]
+                        [--min_window_size MIN_WINDOW_SIZE]
+                        [--max_window_size MAX_WINDOW_SIZE]
+                        [--set_blank SET_BLANK] [--gratis_blank GRATIS_BLANK]
+                        [--replace_spaces_with_blanks REPLACE_SPACES_WITH_BLANKS]
+                        [--scoring_length SCORING_LENGTH]
+                        [--time_stamps {auto,fixed}]
+                        [--text_converter {tokenize,classic}]
+                        [--kaldi_style_text KALDI_STYLE_TEXT]
+                        [--print_utt_text PRINT_UTT_TEXT]
+                        [--print_utt_score PRINT_UTT_SCORE] -a AUDIO -t TEXT
+                        [-o OUTPUT]
+    
+    ASR Decoding
+    
+    optional arguments:
+      --config CONFIG       Give config file in yaml format (default: None)
+      --log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}
+                            The verbose level of logging (default: INFO)
+      --ngpu NGPU           The number of gpus. 0 indicates CPU mode (default: 0)
+      --dtype {float16,float32,float64}
+                            Data type (default: float32)
+    
+    Model configuration related:
+      --asr_train_config ASR_TRAIN_CONFIG
+      --asr_model_file ASR_MODEL_FILE
+    
+    Text converter related:
+      --token_type {char,bpe,None}
+                            The token type for ASR model. If not given, refers
+                            from the training args (default: None)
+      --bpemodel BPEMODEL   The model path of sentencepiece. If not given, refers
+                            from the training args (default: None)
+    
+    CTC segmentation related:
+      --fs FS               Sampling Frequency. The sampling frequency (in Hz) is
+                            needed to correctly determine the starting and ending
+                            time of aligned segments. (default: 16000)
+      --min_window_size MIN_WINDOW_SIZE
+                            Minimum window size considered for utterance.
+                            (default: None)
+      --max_window_size MAX_WINDOW_SIZE
+                            Maximum window size considered for utterance.
+                            (default: None)
+      --set_blank SET_BLANK
+                            Index of model dictionary for blank token. (default:
+                            None)
+      --gratis_blank GRATIS_BLANK
+                            Set the transition cost of the blank token to zero.
+                            Audio sections labeled with blank tokens can then be
+                            skipped without penalty. Useful if there are unrelated
+                            audio segments between utterances. (default: False)
+      --replace_spaces_with_blanks REPLACE_SPACES_WITH_BLANKS
+                            Fill blanks in between words to better model pauses
+                            between words. This option is only active for
+                            `--text_converter classic`. Segments can be misaligned
+                            if this option is combined with --gratis-blank.
+                            (default: False)
+      --scoring_length SCORING_LENGTH
+                            Changes partitioning length L for calculation of the
+                            confidence score. (default: None)
+      --time_stamps {auto,fixed}
+                            Select method how CTC index duration is estimated, and
+                            thus how the time stamps are calculated. (default:
+                            auto)
+      --text_converter {tokenize,classic}
+                            How CTC segmentation handles text. (default: tokenize)
+    
+    Input/output arguments:
+      --kaldi_style_text KALDI_STYLE_TEXT
+                            Assume that the input text file is kaldi-style
+                            formatted, i.e., the utterance name is at the
+                            beginning of each line. (default: True)
+      --print_utt_text PRINT_UTT_TEXT
+                            Include the utterance text in the segments output.
+                            (default: True)
+      --print_utt_score PRINT_UTT_SCORE
+                            Include the confidence score in the segments output.
+                            (default: True)
+      -a AUDIO, --audio AUDIO
+                            Input audio file. (default: None)
+      -t TEXT, --text TEXT  Input text file. Each line contains the ground truth
+                            of a single utterance. Kaldi-style text files include
+                            the name of the utterance as the first word in the
+                            line. (default: None)
+      -o OUTPUT, --output OUTPUT
+                            Output in the form of a `segments` file. If not given,
+                            output is written to stdout. (default: -)
 .. _asr_inference.py:
 
 asr_inference.py
@@ -40,12 +145,13 @@ asr_inference.py
                             [--lm_file LM_FILE]
                             [--word_lm_train_config WORD_LM_TRAIN_CONFIG]
                             [--word_lm_file WORD_LM_FILE]
-                            [--batch_size BATCH_SIZE] [--nbest NBEST]
-                            [--beam_size BEAM_SIZE] [--penalty PENALTY]
-                            [--maxlenratio MAXLENRATIO]
+                            [--ngram_file NGRAM_FILE] [--batch_size BATCH_SIZE]
+                            [--nbest NBEST] [--beam_size BEAM_SIZE]
+                            [--penalty PENALTY] [--maxlenratio MAXLENRATIO]
                             [--minlenratio MINLENRATIO] [--ctc_weight CTC_WEIGHT]
-                            [--lm_weight LM_WEIGHT] [--streaming STREAMING]
-                            [--token_type {char,bpe,None}] [--bpemodel BPEMODEL]
+                            [--lm_weight LM_WEIGHT] [--ngram_weight NGRAM_WEIGHT]
+                            [--streaming STREAMING] [--token_type {char,bpe,None}]
+                            [--bpemodel BPEMODEL]
     
     ASR Decoding
     
@@ -73,6 +179,7 @@ asr_inference.py
       --lm_file LM_FILE
       --word_lm_train_config WORD_LM_TRAIN_CONFIG
       --word_lm_file WORD_LM_FILE
+      --ngram_file NGRAM_FILE
     
     Beam-search related:
       --batch_size BATCH_SIZE
@@ -93,6 +200,8 @@ asr_inference.py
                             CTC weight in joint decoding (default: 0.5)
       --lm_weight LM_WEIGHT
                             RNNLM weight (default: 1.0)
+      --ngram_weight NGRAM_WEIGHT
+                            ngram weight (default: 0.9)
       --streaming STREAMING
     
     Text converter related:
@@ -141,9 +250,13 @@ asr_train.py
                         [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                         [--use_tensorboard USE_TENSORBOARD]
                         [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                        [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                        [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                        [--wandb_name WANDB_NAME]
+                        [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                        [--detect_anomaly DETECT_ANOMALY]
                         [--pretrain_path PRETRAIN_PATH]
                         [--init_param [INIT_PARAM [INIT_PARAM ...]]]
+                        [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
                         [--freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]]
                         [--num_iters_per_epoch NUM_ITERS_PER_EPOCH]
                         [--batch_size BATCH_SIZE]
@@ -167,7 +280,7 @@ asr_train.py
                         [--max_cache_size MAX_CACHE_SIZE]
                         [--max_cache_fd MAX_CACHE_FD]
                         [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                        [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
                         [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
@@ -179,18 +292,18 @@ asr_train.py
                         [--token_type {bpe,char,word,phn}] [--bpemodel BPEMODEL]
                         [--non_linguistic_symbols NON_LINGUISTIC_SYMBOLS]
                         [--cleaner {None,tacotron,jaconv,vietnamese}]
-                        [--g2p {None,g2p_en,pyopenjtalk,pyopenjtalk_kana}]
+                        [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}]
                         [--speech_volume_normalize SPEECH_VOLUME_NORMALIZE]
                         [--rir_scp RIR_SCP] [--rir_apply_prob RIR_APPLY_PROB]
                         [--noise_scp NOISE_SCP]
                         [--noise_apply_prob NOISE_APPLY_PROB]
                         [--noise_db_range NOISE_DB_RANGE]
-                        [--frontend {default,sliding_window}]
+                        [--frontend {default,sliding_window,s3prl}]
                         [--frontend_conf FRONTEND_CONF] [--specaug {specaug,None}]
                         [--specaug_conf SPECAUG_CONF]
                         [--normalize {global_mvn,utterance_mvn,None}]
                         [--normalize_conf NORMALIZE_CONF]
-                        [--preencoder {sinc,None}]
+                        [--preencoder {sinc,linear,None}]
                         [--preencoder_conf PREENCODER_CONF]
                         [--encoder {conformer,transformer,contextual_block_transformer,vgg_rnn,rnn,wav2vec2}]
                         [--encoder_conf ENCODER_CONF]
@@ -205,7 +318,7 @@ asr_train.py
                             non_linguistic_symbols file path (default: None)
       --cleaner {None,tacotron,jaconv,vietnamese}
                             Apply text cleaning (default: None)
-      --g2p {None,g2p_en,pyopenjtalk,pyopenjtalk_kana}
+      --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}
                             Specify g2p method if --token_type=phn (default: None)
       --speech_volume_normalize SPEECH_VOLUME_NORMALIZE
                             Scale the maximum amplitude to the given value. (default: None)
@@ -232,7 +345,7 @@ asr_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -307,6 +420,12 @@ asr_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -320,6 +439,8 @@ asr_train.py
                               # Load only decoder parameters excluding decoder.embed  --init_param some/where/model.pth:decoder:decoder:decoder.embed
                               --init_param some/where/model.pth:decoder:decoder:decoder.embed
                              (default: [])
+      --ignore_init_mismatch IGNORE_INIT_MISMATCH
+                            Ignore size mismatch when loading pre-trained model (default: False)
       --freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]
                             Freeze parameters (default: [])
     
@@ -506,7 +627,7 @@ asr_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -523,9 +644,9 @@ asr_train.py
                             The initialization method (default: None)
       --input_size INPUT_SIZE
                             The number of input dimension of the feature (default: None)
-      --ctc_conf CTC_CONF   The keyword arguments for CTC class. (default: {'dropout_rate': 0.0, 'ctc_type': 'builtin', 'reduce': True, 'ignore_nan_grad': False})
+      --ctc_conf CTC_CONF   The keyword arguments for CTC class. (default: {'dropout_rate': 0.0, 'ctc_type': 'builtin', 'reduce': True, 'ignore_nan_grad': True})
       --model_conf MODEL_CONF
-                            The keyword arguments for model class. (default: {'ctc_weight': 0.5, 'ignore_id': -1, 'lsm_weight': 0.0, 'length_normalized_loss': False, 'report_cer': True, 'report_wer': True, 'sym_space': '<space>', 'sym_blank': '<blank>'})
+                            The keyword arguments for model class. (default: {'ctc_weight': 0.5, 'ignore_id': -1, 'lsm_weight': 0.0, 'length_normalized_loss': False, 'report_cer': True, 'report_wer': True, 'sym_space': '<space>', 'sym_blank': '<blank>', 'extract_feats_in_collect_stats': True})
     
       Preprocess related
     
@@ -534,7 +655,7 @@ asr_train.py
       --token_type {bpe,char,word,phn}
                             The text will be tokenized in the specified level token (default: bpe)
       --bpemodel BPEMODEL   The model file of sentencepiece (default: None)
-      --frontend {default,sliding_window}
+      --frontend {default,sliding_window,s3prl}
                             The frontend type (default: default)
       --frontend_conf FRONTEND_CONF
                             The keyword arguments for frontend (default: {})
@@ -546,7 +667,7 @@ asr_train.py
                             The normalize type (default: utterance_mvn)
       --normalize_conf NORMALIZE_CONF
                             The keyword arguments for normalize (default: {})
-      --preencoder {sinc,None}
+      --preencoder {sinc,linear,None}
                             The preencoder type (default: None)
       --preencoder_conf PREENCODER_CONF
                             The keyword arguments for preencoder (default: {})
@@ -654,9 +775,13 @@ diar_train.py
                          [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                          [--use_tensorboard USE_TENSORBOARD]
                          [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                         [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                         [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                         [--wandb_name WANDB_NAME]
+                         [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                         [--detect_anomaly DETECT_ANOMALY]
                          [--pretrain_path PRETRAIN_PATH]
                          [--init_param [INIT_PARAM [INIT_PARAM ...]]]
+                         [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
                          [--freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]]
                          [--num_iters_per_epoch NUM_ITERS_PER_EPOCH]
                          [--batch_size BATCH_SIZE]
@@ -680,7 +805,7 @@ diar_train.py
                          [--max_cache_size MAX_CACHE_SIZE]
                          [--max_cache_fd MAX_CACHE_FD]
                          [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                         [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                         [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                          [--optim_conf OPTIM_CONF]
                          [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                          [--scheduler_conf SCHEDULER_CONF] [--num_spk NUM_SPK]
@@ -715,7 +840,7 @@ diar_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -790,6 +915,12 @@ diar_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -803,6 +934,8 @@ diar_train.py
                               # Load only decoder parameters excluding decoder.embed  --init_param some/where/model.pth:decoder:decoder:decoder.embed
                               --init_param some/where/model.pth:decoder:decoder:decoder.embed
                              (default: [])
+      --ignore_init_mismatch IGNORE_INIT_MISMATCH
+                            Ignore size mismatch when loading pre-trained model (default: False)
       --freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]
                             Freeze parameters (default: [])
     
@@ -989,7 +1122,7 @@ diar_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -1173,9 +1306,13 @@ enh_train.py
                         [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                         [--use_tensorboard USE_TENSORBOARD]
                         [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                        [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                        [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                        [--wandb_name WANDB_NAME]
+                        [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                        [--detect_anomaly DETECT_ANOMALY]
                         [--pretrain_path PRETRAIN_PATH]
                         [--init_param [INIT_PARAM [INIT_PARAM ...]]]
+                        [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
                         [--freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]]
                         [--num_iters_per_epoch NUM_ITERS_PER_EPOCH]
                         [--batch_size BATCH_SIZE]
@@ -1199,7 +1336,7 @@ enh_train.py
                         [--max_cache_size MAX_CACHE_SIZE]
                         [--max_cache_fd MAX_CACHE_FD]
                         [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                        [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
                         [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
@@ -1229,7 +1366,7 @@ enh_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -1304,6 +1441,12 @@ enh_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -1317,6 +1460,8 @@ enh_train.py
                               # Load only decoder parameters excluding decoder.embed  --init_param some/where/model.pth:decoder:decoder:decoder.embed
                               --init_param some/where/model.pth:decoder:decoder:decoder.embed
                              (default: [])
+      --ignore_init_mismatch IGNORE_INIT_MISMATCH
+                            Ignore size mismatch when loading pre-trained model (default: False)
       --freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]
                             Freeze parameters (default: [])
     
@@ -1503,7 +1648,7 @@ enh_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -1535,6 +1680,90 @@ enh_train.py
                             The decoder type (default: stft)
       --decoder_conf DECODER_CONF
                             The keyword arguments for decoder (default: {})
+.. _k2_asr_inference.py:
+
+k2_asr_inference.py
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: none
+
+    usage: k2_asr_inference.py [-h] [--config CONFIG]
+                               [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
+                               --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
+                               [--dtype {float16,float32,float64}]
+                               [--num_workers NUM_WORKERS]
+                               --data_path_and_name_and_type
+                               DATA_PATH_AND_NAME_AND_TYPE [--key_file KEY_FILE]
+                               [--allow_variable_data_keys ALLOW_VARIABLE_DATA_KEYS]
+                               --asr_train_config ASR_TRAIN_CONFIG
+                               --asr_model_file ASR_MODEL_FILE
+                               [--lm_train_config LM_TRAIN_CONFIG]
+                               [--lm_file LM_FILE]
+                               [--word_lm_train_config WORD_LM_TRAIN_CONFIG]
+                               [--word_lm_file WORD_LM_FILE]
+                               [--batch_size BATCH_SIZE] [--nbest NBEST]
+                               [--beam_size BEAM_SIZE] [--penalty PENALTY]
+                               [--maxlenratio MAXLENRATIO]
+                               [--minlenratio MINLENRATIO]
+                               [--ctc_weight CTC_WEIGHT] [--lm_weight LM_WEIGHT]
+                               [--streaming STREAMING]
+                               [--token_type {char,bpe,None}]
+                               [--bpemodel BPEMODEL]
+    
+    ASR Decoding
+    
+    optional arguments:
+      --config CONFIG       Give config file in yaml format (default: None)
+      --log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}
+                            The verbose level of logging (default: INFO)
+      --output_dir OUTPUT_DIR
+      --ngpu NGPU           The number of gpus. 0 indicates CPU mode (default: 0)
+      --seed SEED           Random seed (default: 0)
+      --dtype {float16,float32,float64}
+                            Data type (default: float32)
+      --num_workers NUM_WORKERS
+                            The number of workers used for DataLoader (default: 1)
+    
+    Input data related:
+      --data_path_and_name_and_type DATA_PATH_AND_NAME_AND_TYPE
+      --key_file KEY_FILE
+      --allow_variable_data_keys ALLOW_VARIABLE_DATA_KEYS
+    
+    The model configuration related:
+      --asr_train_config ASR_TRAIN_CONFIG
+      --asr_model_file ASR_MODEL_FILE
+      --lm_train_config LM_TRAIN_CONFIG
+      --lm_file LM_FILE
+      --word_lm_train_config WORD_LM_TRAIN_CONFIG
+      --word_lm_file WORD_LM_FILE
+    
+    Beam-search related:
+      --batch_size BATCH_SIZE
+                            The batch size for inference (default: 1)
+      --nbest NBEST         Output N-best hypotheses (default: 1)
+      --beam_size BEAM_SIZE
+                            Beam size (default: 20)
+      --penalty PENALTY     Insertion penalty (default: 0.0)
+      --maxlenratio MAXLENRATIO
+                            Input length ratio to obtain max output length. If
+                            maxlenratio=0.0 (default), it uses a end-detect
+                            function to automatically find maximum hypothesis
+                            lengths (default: 0.0)
+      --minlenratio MINLENRATIO
+                            Input length ratio to obtain min output length
+                            (default: 0.0)
+      --ctc_weight CTC_WEIGHT
+                            CTC weight in joint decoding (default: 0.5)
+      --lm_weight LM_WEIGHT
+                            RNNLM weight (default: 1.0)
+      --streaming STREAMING
+    
+    Text converter related:
+      --token_type {char,bpe,None}
+                            The token type for ASR model. If not given, refers
+                            from the training args (default: None)
+      --bpemodel BPEMODEL   The model path of sentencepiece. If not given, refers
+                            from the training args (default: None)
 .. _launch.py:
 
 launch.py
@@ -1673,9 +1902,12 @@ lm_train.py
                        [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                        [--use_tensorboard USE_TENSORBOARD] [--use_wandb USE_WANDB]
                        [--wandb_project WANDB_PROJECT] [--wandb_id WANDB_ID]
+                       [--wandb_entity WANDB_ENTITY] [--wandb_name WANDB_NAME]
+                       [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
                        [--detect_anomaly DETECT_ANOMALY]
                        [--pretrain_path PRETRAIN_PATH]
                        [--init_param [INIT_PARAM [INIT_PARAM ...]]]
+                       [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
                        [--freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]]
                        [--num_iters_per_epoch NUM_ITERS_PER_EPOCH]
                        [--batch_size BATCH_SIZE]
@@ -1699,7 +1931,7 @@ lm_train.py
                        [--max_cache_size MAX_CACHE_SIZE]
                        [--max_cache_fd MAX_CACHE_FD]
                        [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                       [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                       [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                        [--optim_conf OPTIM_CONF]
                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                        [--scheduler_conf SCHEDULER_CONF] [--token_list TOKEN_LIST]
@@ -1709,7 +1941,7 @@ lm_train.py
                        [--token_type {bpe,char,word}] [--bpemodel BPEMODEL]
                        [--non_linguistic_symbols NON_LINGUISTIC_SYMBOLS]
                        [--cleaner {None,tacotron,jaconv,vietnamese}]
-                       [--g2p {None,g2p_en,pyopenjtalk,pyopenjtalk_kana}]
+                       [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}]
                        [--lm {seq_rnn,transformer}] [--lm_conf LM_CONF]
     
     base parser
@@ -1720,7 +1952,7 @@ lm_train.py
                             non_linguistic_symbols file path (default: None)
       --cleaner {None,tacotron,jaconv,vietnamese}
                             Apply text cleaning (default: None)
-      --g2p {None,g2p_en,pyopenjtalk,pyopenjtalk_kana}
+      --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}
                             Specify g2p method if --token_type=phn (default: None)
     
     Common configuration:
@@ -1736,7 +1968,7 @@ lm_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -1811,6 +2043,12 @@ lm_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -1824,6 +2062,8 @@ lm_train.py
                               # Load only decoder parameters excluding decoder.embed  --init_param some/where/model.pth:decoder:decoder:decoder.embed
                               --init_param some/where/model.pth:decoder:decoder:decoder.embed
                              (default: [])
+      --ignore_init_mismatch IGNORE_INIT_MISMATCH
+                            Ignore size mismatch when loading pre-trained model (default: False)
       --freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]
                             Freeze parameters (default: [])
     
@@ -2010,7 +2250,7 @@ lm_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
@@ -2093,7 +2333,7 @@ tokenize_text.py
                             [--non_linguistic_symbols NON_LINGUISTIC_SYMBOLS]
                             [--remove_non_linguistic_symbols REMOVE_NON_LINGUISTIC_SYMBOLS]
                             [--cleaner {None,tacotron,jaconv,vietnamese}]
-                            [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic}]
+                            [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}]
                             [--write_vocabulary WRITE_VOCABULARY]
                             [--vocabulary_size VOCABULARY_SIZE] [--cutoff CUTOFF]
                             [--add_symbol ADD_SYMBOL]
@@ -2124,7 +2364,7 @@ tokenize_text.py
                             False)
       --cleaner {None,tacotron,jaconv,vietnamese}
                             Apply text cleaning (default: None)
-      --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic}
+      --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}
                             Specify g2p method if --token_type=phn (default: None)
     
     write_vocabulary mode related:
@@ -2258,9 +2498,13 @@ tts_train.py
                         [--use_amp USE_AMP] [--log_interval LOG_INTERVAL]
                         [--use_tensorboard USE_TENSORBOARD]
                         [--use_wandb USE_WANDB] [--wandb_project WANDB_PROJECT]
-                        [--wandb_id WANDB_ID] [--detect_anomaly DETECT_ANOMALY]
+                        [--wandb_id WANDB_ID] [--wandb_entity WANDB_ENTITY]
+                        [--wandb_name WANDB_NAME]
+                        [--wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL]
+                        [--detect_anomaly DETECT_ANOMALY]
                         [--pretrain_path PRETRAIN_PATH]
                         [--init_param [INIT_PARAM [INIT_PARAM ...]]]
+                        [--ignore_init_mismatch IGNORE_INIT_MISMATCH]
                         [--freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]]
                         [--num_iters_per_epoch NUM_ITERS_PER_EPOCH]
                         [--batch_size BATCH_SIZE]
@@ -2284,7 +2528,7 @@ tts_train.py
                         [--max_cache_size MAX_CACHE_SIZE]
                         [--max_cache_fd MAX_CACHE_FD]
                         [--valid_max_cache_size VALID_MAX_CACHE_SIZE]
-                        [--optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
+                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
                         [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
@@ -2294,7 +2538,7 @@ tts_train.py
                         [--token_type {bpe,char,word,phn}] [--bpemodel BPEMODEL]
                         [--non_linguistic_symbols NON_LINGUISTIC_SYMBOLS]
                         [--cleaner {None,tacotron,jaconv,vietnamese}]
-                        [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic}]
+                        [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}]
                         [--feats_extract {fbank,spectrogram}]
                         [--feats_extract_conf FEATS_EXTRACT_CONF]
                         [--normalize {global_mvn,None}]
@@ -2317,7 +2561,7 @@ tts_train.py
                             non_linguistic_symbols file path (default: None)
       --cleaner {None,tacotron,jaconv,vietnamese}
                             Apply text cleaning (default: None)
-      --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic}
+      --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pypinyin_g2p,pypinyin_g2p_phone,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,g2pk,g2pk_no_space}
                             Specify g2p method if --token_type=phn (default: None)
     
     Common configuration:
@@ -2333,7 +2577,7 @@ tts_train.py
       --num_workers NUM_WORKERS
                             The number of workers used for DataLoader (default: 1)
       --num_att_plot NUM_ATT_PLOT
-                            The number images to plot the outputs from attention. This option makes sense only when attention-based model (default: 3)
+                            The number images to plot the outputs from attention. This option makes sense only when attention-based model. We can also disable the attention plot by setting it 0 (default: 3)
     
     distributed training related:
       --dist_backend DIST_BACKEND
@@ -2408,6 +2652,12 @@ tts_train.py
       --wandb_project WANDB_PROJECT
                             Specify wandb project (default: None)
       --wandb_id WANDB_ID   Specify wandb id (default: None)
+      --wandb_entity WANDB_ENTITY
+                            Specify wandb entity (default: None)
+      --wandb_name WANDB_NAME
+                            Specify wandb run name (default: None)
+      --wandb_model_log_interval WANDB_MODEL_LOG_INTERVAL
+                            Set the model log period (default: -1)
       --detect_anomaly DETECT_ANOMALY
                             Set torch.autograd.set_detect_anomaly (default: False)
     
@@ -2421,6 +2671,8 @@ tts_train.py
                               # Load only decoder parameters excluding decoder.embed  --init_param some/where/model.pth:decoder:decoder:decoder.embed
                               --init_param some/where/model.pth:decoder:decoder:decoder.embed
                              (default: [])
+      --ignore_init_mismatch IGNORE_INIT_MISMATCH
+                            Ignore size mismatch when loading pre-trained model (default: False)
       --freeze_param [FREEZE_PARAM [FREEZE_PARAM ...]]
                             Freeze parameters (default: [])
     
@@ -2607,7 +2859,7 @@ tts_train.py
                             The maximum cache size for validation data loader. e.g. 10MB, 20GB. If None, the 5 percent size of --max_cache_size (default: None)
     
     Optimizer related:
-      --optim {adam,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,adamw,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
+      --optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,radam,sgdw,yogi}
                             The optimizer type (default: adadelta)
       --optim_conf OPTIM_CONF
                             The keyword arguments for optimizer (default: {})
