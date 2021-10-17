@@ -510,6 +510,9 @@ class CommonPreprocessor(AbsPreprocessor):
                         text = CHINESE_SPACE_PATTERN.sub('', text)
                         text = CHINESE_BORDER_PATTERN.sub(' ', text)
 
+                        data[self.speech_name] = speech
+                        data[self.text_name] = text
+
 
                 if 'insert' in self.splicing_config['configs'] and self.splicing_config['configs']['insert']['prob'] > 0:
                     raise NotImplementedError
@@ -601,6 +604,9 @@ class CommonPreprocessor(AbsPreprocessor):
 
                                 speech = np.concatenate(speech_chunks, axis=0)
 
+                                data[self.speech_name] = speech
+                                data[self.text_name] = text
+
                                 # if len(self.word_choicer.x) - len(self.word_choicer.indices) <= 3:
                                 #     save_spliced(Path('/yelingxuan/espnet_experiments/datatang_oov_mutual/asr/exp/asr_train_debug/spliced'), 
                                 #                 uttid=uid, speech=speech, text=text, 
@@ -618,7 +624,7 @@ class CommonPreprocessor(AbsPreprocessor):
 
         if self.speech_name in data:
             if self.train and self.rirs is not None and self.noises is not None:
-                speech = locals().get('speech', data[self.speech_name])
+                speech = data[self.speech_name]
                 nsamples = len(speech)
 
                 # speech: (Nmic, Time)
@@ -704,7 +710,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 data[self.speech_name] = speech * self.speech_volume_normalize / ma
 
         if self.text_name in data and self.tokenizer is not None:
-            text = locals().get('text', data[self.text_name])
+            text = data[self.text_name]
             text = self.text_cleaner(text)
             tokens = self.tokenizer.text2tokens(text)
             text_ints = self.token_id_converter.tokens2ids(tokens)
