@@ -123,7 +123,7 @@ class FairSeqWav2Vec2Encoder(AbsEncoder):
         with torch.no_grad() if not ft else contextlib.nullcontext():
             enc_outputs = self.encoders(
                 xs_pad,
-                masks,
+                masks, # TODO: 这里有random mask增强，但是valid时没有关闭
                 features_only=True,
             )
 

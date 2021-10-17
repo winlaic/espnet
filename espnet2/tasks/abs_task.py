@@ -294,7 +294,7 @@ class AbsTask(ABC):
         group.add_argument(
             "--iterator_type",
             type=str,
-            choices=["sequence", "chunk", "task", "none"],
+            choices=["sequence", "weighted_sequence", "chunk", "task", "none"],
             default="sequence",
             help="Specify iterator type",
         )
@@ -1426,6 +1426,13 @@ class AbsTask(ABC):
                 iter_options=iter_options,
                 mode=mode,
             )
+
+        elif args.iterator_type == "weighted_sequence":
+            return cls.build_weighted_sequence_iter_factory(
+                args=args,
+                iter_options=iter_options,
+                mode=mode,
+            )
         elif args.iterator_type == "chunk":
             return cls.build_chunk_iter_factory(
                 args=args,
@@ -1518,6 +1525,107 @@ class AbsTask(ABC):
             collate_fn=iter_options.collate_fn,
             pin_memory=args.ngpu > 0,
         )
+    
+    @classmethod
+    def build_weighted_sequence_iter_factory(
+        cls, args: argparse.Namespace, iter_options: IteratorOptions, mode: str
+    ) -> AbsIterFactory:
+        assert check_argument_types()
+
+        if mode != 'train':
+            logging.warning(f"Mode {mode} not support weighted iterator, fail back to normal version.")
+            return cls.build_sequence_iter_factory(args, iter_options, mode)
+
+        dataset = ESPnetDataset(
+            iter_options.data_path_and_name_and_type,
+            float_dtype=args.train_dtype,
+            preprocess=iter_options.preprocess_fn,
+            max_cache_size=iter_options.max_cache_size,
+            max_cache_fd=iter_options.max_cache_fd,
+        )
+        cls.check_task_requirements(
+            dataset, args.allow_variable_data_keys, train=iter_options.train
+        )
+
+        assert (Path(iter_options.data_path_and_name_and_type[0][0]).parent / "utt2category").exists()
+        assert (Path(iter_options.data_path_and_name_and_type[0][0]).parent / "category2weight").exists()
+
+        utt2category_file = (Path(iter_options.data_path_and_name_and_type[0][0]).parent / "utt2category").as_posix()
+        
+        from espnet2.fileio.read_text import read_2column_text
+        category2weight = read_2column_text(Path(iter_options.data_path_and_name_and_type[0][0]).parent / "category2weight")
+        category2weight = {k: float(v) for k, v in category2weight.items()}
+        category_weight_sum = sum(category2weight.values())
+        category2weight = {k: v/category_weight_sum for k, v in category2weight.items()}
+
+        batch_samplers = {}
+        for category, weight in category2weight.items():
+            batch_samplers[category] = build_batch_sampler(
+                type=iter_options.batch_type + '_category',
+                shape_files=iter_options.shape_files,
+                fold_lengths=args.fold_length,
+                batch_size=round(iter_options.batch_size * weight),
+                batch_bins=round(iter_options.batch_bins * weight),
+                sort_in_batch=args.sort_in_batch,
+                sort_batch=args.sort_batch,
+                drop_last=False,
+                min_batch_size=torch.distributed.get_world_size()
+                if iter_options.distributed
+                else 1,
+                utt2category_file=utt2category_file,
+                category=category
+            )
+
+        factories = []
+
+        for category, batch_sampler in batch_samplers.items():
+            batches = list(batch_sampler)
+            if iter_options.num_batches is not None:
+                batches = batches[: iter_options.num_batches]
+
+            # if category == 'datatang':
+            #     batches = batches[: 10]
+            # else:
+            #     batches = batches[: 3]
+
+            bs_list = [len(batch) for batch in batches]
+
+            logging.info(f"[{mode}] dataset:\n{dataset}")
+            logging.info(f"[{mode}] category: {category}")
+            logging.info(f"[{mode}] Batch sampler: {batch_sampler}")
+            logging.info(
+                f"[{mode}] mini-batch sizes summary: N-batch={len(bs_list)}, "
+                f"mean={np.mean(bs_list):.1f}, min={np.min(bs_list)}, max={np.max(bs_list)}"
+            )
+
+            if iter_options.distributed:
+                world_size = torch.distributed.get_world_size()
+                rank = torch.distributed.get_rank()
+                for batch in batches:
+                    if len(batch) < world_size:
+                        raise RuntimeError(
+                            f"The batch-size must be equal or more than world_size: "
+                            f"{len(batch)} < {world_size}"
+                        )
+                batches = [batch[rank::world_size] for batch in batches]
+
+            factory = SequenceIterFactory(
+                dataset=dataset,
+                batches=batches,
+                seed=args.seed,
+                num_iters_per_epoch=None,
+                shuffle=iter_options.train,
+                num_workers=max(1, round(args.num_workers * category2weight[category])),
+                collate_fn=iter_options.collate_fn,
+                pin_memory=args.ngpu > 0,
+            )
+
+            factories.append(factory)
+
+        from espnet2.iterators.parallel_iter_factory import ParallelIterFactory
+        ret = ParallelIterFactory(*factories, num_iters_per_epoch=None)
+
+        return ret
 
     @classmethod
     def build_chunk_iter_factory(

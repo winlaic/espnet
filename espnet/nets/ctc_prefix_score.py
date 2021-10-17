@@ -154,6 +154,7 @@ class CTCPrefixScoreTH(object):
             end = self.input_length
 
         # compute forward probabilities log(r_t^n(h)) and log(r_t^b(h))
+        # CTC prefix 核心代码
         for t in range(start, end):
             rp = r[t - 1]
             rr = torch.stack([rp[0], log_phi[t - 1], rp[0], rp[1]]).view(

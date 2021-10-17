@@ -466,6 +466,8 @@ class Trainer:
         use_wandb = options.use_wandb
         distributed = distributed_option.distributed
 
+        logging_batch = True
+
         if log_interval is None:
             try:
                 log_interval = max(len(iterator) // 20, 10)
@@ -479,7 +481,7 @@ class Trainer:
         iterator_stop = torch.tensor(0).to("cuda" if ngpu > 0 else "cpu")
 
         start_time = time.perf_counter()
-        for iiter, (_, batch) in enumerate(
+        for iiter, (uttids, batch) in enumerate(
             reporter.measure_iter_time(iterator, "iter_time"), 1
         ):
             assert isinstance(batch, dict), type(batch)
@@ -493,6 +495,12 @@ class Trainer:
             if no_forward_run:
                 all_steps_are_invalid = False
                 continue
+
+            if logging_batch:
+                # logging.info(f'Rank {distributed_option.dist_rank}: {uttids}')
+                for uttid, token_ids, token_length in zip(uttids, batch['text'], batch['text_lengths']):
+                    real_texts = ' '.join(iterator.dataset.preprocess.token_id_converter.ids2tokens(token_ids[:token_length]))
+                    logging.info(f"UTT={uttid}\tTEXT={real_texts}")
 
             with autocast(scaler is not None):
                 with reporter.measure_time("forward_time"):

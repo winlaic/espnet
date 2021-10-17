@@ -86,6 +86,7 @@ def build_batch_sampler(
     fold_lengths: Sequence[int] = (),
     padding: bool = True,
     utt2category_file: str = None,
+    category = None,
 ) -> AbsSampler:
     """Helper function to instantiate BatchSampler.
 
@@ -148,6 +149,20 @@ def build_batch_sampler(
             drop_last=drop_last,
             padding=padding,
             min_batch_size=min_batch_size,
+        )
+
+    elif type == "numel_category":
+        from espnet2.samplers.category_num_elements_batch_sampler import CategoryNumElementsBatchSampler
+        retval = CategoryNumElementsBatchSampler(
+            batch_bins=batch_bins,
+            shape_files=shape_files,
+            sort_in_batch=sort_in_batch,
+            sort_batch=sort_batch,
+            drop_last=drop_last,
+            padding=padding,
+            min_batch_size=min_batch_size,
+            utt2category_file=utt2category_file,
+            category=category,
         )
 
     elif type == "length":

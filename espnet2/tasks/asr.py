@@ -295,6 +295,12 @@ class ASRTask(AbsTask):
             help="The range of noise decibel level.",
         )
 
+        parser.add_argument(
+            "--splicing_config",
+            type=str,
+            default=None,
+        )
+
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
             # e.g. --encoder and --encoder_conf
@@ -340,6 +346,7 @@ class ASRTask(AbsTask):
                 speech_volume_normalize=args.speech_volume_normalize
                 if hasattr(args, "rir_scp")
                 else None,
+                splicing_config=args.splicing_config,
             )
         else:
             retval = None
