@@ -27,6 +27,23 @@ import logging
 from pathlib import Path
 
 
+def kill(key, self):
+    align_info = self.splicing_data.source_align_info[key]
+    source_text_tokens = ' '.join([item['text'] for item in align_info])
+    source_text_parsed = self.splicing_data.nlp_chn(source_text_tokens)
+    source_pos = [item.to_dict()[0]['upos'] for item in source_text_parsed.iter_tokens()]
+
+    # Change english slices use english model.
+    source_pos_eng_spans = Xspans(source_pos)
+    for eng_spans_slice in source_pos_eng_spans:
+        eng_span = source_text_tokens.split(' ')[eng_spans_slice]
+        eng_span = ' '.join(eng_span)
+        eng_span_parsed = self.splicing_data.nlp_eng(eng_span)
+        source_pos[eng_spans_slice] = [item.to_dict()[0]['upos'] for item in eng_span_parsed.iter_tokens()]
+
+    return source_pos
+
+
 
 def save_spliced(path: Path, uttid, speech, text, insert_words, insert_word_positions):
     path.mkdir(exist_ok=True, parents=True)
@@ -57,11 +74,13 @@ class PsudoRandomChoicer:
         ret = []
         if len(self.indices) < n:
             self.reset()
-
+        retincides = []
         for _ in range(n):
-            ret.append(self.x[self.indices.pop()])
+            idx = self.indices.pop()
+            ret.append(self.x[idx])
+            retincides.append(idx)
 
-        return ret
+        return ret, retincides
 
 
 class LazyInserter:
@@ -100,6 +119,7 @@ def spm_encode_english(text, model: sentencepiece.SentencePieceProcessor):
 TIME_AXIS = 0
 
 ENGLISH_WORD_PATTERN = re.compile(r"(▁[A-Za-z0-9']*( [A-Za-z0-9']+)*)")
+ENGLISH_SPAN_PATTERN = re.compile(r"([A-Za-z0-9']+( [A-Za-z0-9']+)*)")
 CHINESE_SPACE_PATTERN = re.compile(r"(?<=[\u4e00-\u9fa5]) (?=[\u4e00-\u9fa5])")
 CHINESE_BORDER_PATTERN = re.compile(r"(?<=[\u4e00-\u9fa5])(?=[\u4e00-\u9fa5])")
 
@@ -207,6 +227,25 @@ def detect_non_silence(
         [(0, 0)] * (x.ndim - 1) + [(0, x.shape[-1] - detects.shape[-1])],
         mode="edge",
     )
+
+def Xspans(pos: List[str]):
+    ret = []
+    current_start = None
+    for i, p in enumerate(pos):
+        if p == 'X':
+            if current_start is None:
+                current_start = i
+        else:
+            if current_start is not None:
+                ret.append(slice(current_start, i))
+                current_start = None
+    else:
+        if current_start is not None:
+            ret.append(slice(current_start, None))
+
+    return ret
+
+
 
 
 class SpeechChunk:
@@ -381,24 +420,27 @@ class CommonPreprocessor(AbsPreprocessor):
             import yaml, json, re, copy
             import sentencepiece, jieba
             from espnet2.fileio.read_text import read_2column_text
-            with open(splicing_config, 'r', encoding='utf8') as f:
-                self.splicing_config = yaml.safe_load(f)
+            from omegaconf import OmegaConf
+            from types import SimpleNamespace
+            self.splicing_config = OmegaConf.load(splicing_config)
+            self.splicing_data = SimpleNamespace()
+            # with open(splicing_config, 'r', encoding='utf8') as f:
+            #     self.splicing_config = yaml.safe_load(f)
 
-            with Path(self.splicing_config['align_info_json']).open('r', encoding='utf8') as f:
-                self.align_info = json.load(f)
+            with Path(self.splicing_config.align_info_json).open('r', encoding='utf8') as f:
+                self.splicing_data.source_align_info = json.load(f)
 
-            self.splicing_info = {}
             
-            with open(self.splicing_config['audio_dictionary_index'], 'r', encoding='utf8') as f:
-                self.splicing_info['audio_dictionary_index'] = json.load(f)
-            audio_dictionary_type = self.splicing_config['audio_dictionary_type']
+            with open(self.splicing_config.audio_dictionary_index, 'r', encoding='utf8') as f:
+                self.splicing_data.audio_dictionary_index = json.load(f)
 
+            audio_dictionary_type = self.splicing_config.audio_dictionary_type
             if audio_dictionary_type == 'kaldi_ark':
                 import kaldiio
                 audio_dictionary_book = read_2column_text(self.splicing_config['audio_dictionary_book'])
                 from os.path import exists
                 assert all(exists(item.split(':')[0]) for item in audio_dictionary_book.values())
-                self.splicing_info['audio_dictionary_book'] = audio_dictionary_book
+                self.splicing_data.audio_dictionary_book = audio_dictionary_book
 
 
             elif audio_dictionary_type == 'wav':
@@ -407,28 +449,65 @@ class CommonPreprocessor(AbsPreprocessor):
             else:
                 raise NotImplementedError
 
-            if self.splicing_config['bpe_model'] is not None:
-                self.splicing_info['bpe_model'] = sentencepiece.SentencePieceProcessor()
-                self.splicing_info['bpe_model'].Load(self.splicing_config['bpe_model'])
-                self.spm_encode_english = partial(spm_encode_english, model=self.splicing_info['bpe_model'])
+            if self.splicing_config.bpe_model is not None:
+                self.splicing_data.bpe_model = sentencepiece.SentencePieceProcessor()
+                self.splicing_data.bpe_model.Load(self.splicing_config.bpe_model)
+                self.splicing_data.spm_encode_english = partial(spm_encode_english, model=self.splicing_data.bpe_model)
             
-            if 'insert' in self.splicing_config['configs']:
+            if 'insert' in self.splicing_config.configs:
 
-                insert_configs = self.splicing_config['configs']['insert']
+                insert_configs = self.splicing_config.configs.insert
                 
-                with Path(insert_configs['words_to_insert']).open('r', encoding='utf8') as f:
-                    self.splicing_info['words_to_insert'] = json.load(f)
+                with Path(insert_configs.words_to_insert).open('r', encoding='utf8') as f:
+                    self.splicing_data.words_to_insert = json.load(f)
 
-            if 'replace' in self.splicing_config['configs']:
-                replace_configs = self.splicing_config['configs']['replace']
+            if 'replace' in self.splicing_config.configs:
+                replace_configs = self.splicing_config.configs.replace
 
                 with Path(replace_configs['words_to_replace']).open('r', encoding='utf8') as f:
-                    self.splicing_info['words_to_replace'] = json.load(f)
+                    self.splicing_data.words_to_replace = json.load(f)
+
+            if self.splicing_config.stanza:
+                import stanza, pickle
+                from tqdm import tqdm
+                stanza_cache_path = Path(self.splicing_config.stanza_cache_file)
+                if not stanza_cache_path.exists():
+
+                    raise NotImplementedError
+                    stanza_cache = {'source': {}, 'oov': []}
+                    self.splicing_data.nlp_chn = stanza.Pipeline(lang='zh', use_gpu=True, package='gsdsimp')
+                    self.splicing_data.nlp_eng = stanza.Pipeline(lang='en', use_gpu=True, package='combined')
+
+                    for key, align_info in tqdm(self.splicing_data.source_align_info.items()):
+                        source_text_tokens = ' '.join([item['text'] for item in align_info])
+                        source_text_parsed = self.splicing_data.nlp_chn(source_text_tokens)
+                        source_pos = [item.to_dict()[0]['upos'] for item in source_text_parsed.iter_tokens()]
+
+                        # Change english slices use english model.
+                        source_pos_eng_spans = Xspans(source_pos)
+                        for eng_spans_slice in source_pos_eng_spans:
+                            eng_span = source_text_tokens.split(' ')[eng_spans_slice]
+                            eng_span = ' '.join(eng_span)
+                            eng_span_parsed = self.splicing_data.nlp_eng(eng_span)
+                            source_pos[eng_spans_slice] = [item.to_dict()[0]['upos'] for item in eng_span_parsed.iter_tokens()]
+
+                        stanza_cache['source'][key] = source_pos
+
+                    stanza_cache['oov'] = [list(self.splicing_data.nlp_eng(item).iter_tokens())[0].to_dict()[0]['upos'] if len(ENGLISH_SPAN_PATTERN.findall(item)) != 0 else list(self.splicing_data.nlp_chn(item).iter_tokens())[0].to_dict()[0]['upos'] for item in self.splicing_data.words_to_replace]
+
+                    with stanza_cache_path.open('wb') as f:
+                        pickle.dump(stanza_cache, f)
+                    self.splicing_data.stanza_cache = stanza_cache
+
+                else:
+                    with stanza_cache_path.open('rb') as f:
+                        self.splicing_data.stanza_cache = pickle.load(f)
+
 
 
         else:
             self.splicing_config = None
-            self.splicing_info = None
+            self.splicing_data = None
 
 
 
@@ -448,13 +527,13 @@ class CommonPreprocessor(AbsPreprocessor):
             #                                     insert_word_positions=[]
             #                         )
 
-            align_info = self.align_info.get(uid, None)
+            align_info = self.splicing_data.source_align_info.get(uid, None)
 
             if align_info is None:
                 logging.warning(f"Utter {uid} has no align info, skipped insertion.")
             else:
-                if self.splicing_info['bpe_model'] is not None:
-                    squeezed_text = ENGLISH_WORD_PATTERN.sub(lambda x: self.splicing_info['bpe_model'].DecodePieces(x[0].split(' ')), text)
+                if self.splicing_data.bpe_model is not None:
+                    squeezed_text = ENGLISH_WORD_PATTERN.sub(lambda x: self.splicing_data.bpe_model.DecodePieces(x[0].split(' ')), text)
                     squeezed_text = CHINESE_SPACE_PATTERN.sub('', squeezed_text)
                     align_info_text = ' '.join(item['text'].upper() for item in align_info)
                     align_info_text = CHINESE_SPACE_PATTERN.sub('', align_info_text)
@@ -475,152 +554,100 @@ class CommonPreprocessor(AbsPreprocessor):
                     replace_configs = self.splicing_config['configs']['replace']
                     if np.random.random() < replace_configs['prob']:
                     # if True:
-                        words_to_replace = self.splicing_info['words_to_replace']
+                        words_to_replace = self.splicing_data.words_to_replace
                         if replace_configs['position'] == 'all':
                             positions_to_replace = speech_chunk.non_silence_chunk_indices
                         else:
                             raise NotImplementedError
 
-                        positions_to_replace_selected = [positions_to_replace[i] for i in np.random.choice(len(positions_to_replace), replace_configs['num_in_selected_positions'], replace=False)]
-                        
-                        if not hasattr(self, 'replace_word_choicer'):
+                        if len(positions_to_replace) < replace_configs['num_in_selected_positions']:
+                            logging.warning(f"Utter {uid} has less than {replace_configs['num_in_selected_positions']}, ignored.")
+                        else:
+
+                            if not hasattr(self, 'replace_word_choicer'):
                                 self.replace_word_choicer = PsudoRandomChoicer(words_to_replace)
-                        replace_words = self.replace_word_choicer.choice(replace_configs['num_in_selected_positions'])
-                        replace_words = [item.lower() for item in replace_words]
 
-                        audio_dictionary_index = self.splicing_info['audio_dictionary_index']
-                        audio_dictionary_book = self.splicing_info['audio_dictionary_book']
+                            replace_words, replace_word_indices = self.replace_word_choicer.choice(replace_configs['num_in_selected_positions'])
+                            replace_words = [item.lower() for item in replace_words]
 
-                        replace_audio_pos = [audio_dictionary_index[item][np.random.choice(len(audio_dictionary_index[item]), 1)[0]] for item in replace_words]
-                        replace_audios = []
-                        for audio_pos in replace_audio_pos:
-                            utt_feature_path = audio_dictionary_book[audio_pos['uttid']]
-                            utt_feature = kaldiio.load_mat(utt_feature_path)
-                            start_frame = int(np.round((audio_pos['start'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift']))
-                            end_frame = int(np.round((audio_pos['end'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift']))
-                            replace_audios.append(utt_feature[start_frame:end_frame, :])
+                            if self.splicing_config.configs.replace.use_stanza:
 
-                        for index, audio, word in zip(positions_to_replace_selected, replace_audios, replace_words):
-                            speech_chunk[index] = (audio, word)
+                                # Firstly use chinese model to tag pos.
+                                # source_text_tokens = ' '.join([item['text'] for item in align_info])
+                                # source_text_parsed = self.splicing_data.nlp_chn(source_text_tokens)
+                                # source_pos = [item.to_dict()[0]['upos'] for item in source_text_parsed.iter_tokens()]
 
-                        speech = speech_chunk.speech
-                        words = [item.upper() for item in speech_chunk.words if len(item) > 0]
-                        words = list(map(self.spm_encode_english, words))
-                        text = ' '.join(words)
-                        text = CHINESE_SPACE_PATTERN.sub('', text)
-                        text = CHINESE_BORDER_PATTERN.sub(' ', text)
+                                # # Change english slices use english model.
+                                # source_pos_eng_spans = Xspans(source_pos)
+                                # for eng_spans_slice in source_pos_eng_spans:
+                                #     eng_span = source_text_tokens.split(' ')[eng_spans_slice]
+                                #     eng_span = ' '.join(eng_span)
+                                #     eng_span_parsed = self.splicing_data.nlp_eng(eng_span)
+                                #     source_pos[eng_spans_slice] = [item.to_dict()[0]['upos'] for item in eng_span_parsed.iter_tokens()]
 
-                        data[self.speech_name] = speech
-                        data[self.text_name] = text
+                                source_pos = self.splicing_data.stanza_cache['source'][uid]
 
 
-                if 'insert' in self.splicing_config['configs'] and self.splicing_config['configs']['insert']['prob'] > 0:
-                    raise NotImplementedError
-                    if np.random.random() < self.splicing_config['configs']['insert']['prob']:
-                    # if True: # for debug
-
-                        words = [item['text'].upper() for item in align_info]
-                        words_insert_indices = list(range(1, len(words)))
-                        
-                        insert_times = []
-                        for i, (pre, post) in enumerate(zip(align_info[:-1], align_info[1:]), start=1):
-                            insert_times.append((pre['end'] + post['start']) / 2)
-
-                        if self.splicing_config['configs']['insert']['include_head_and_tail']:
-                            insert_times.insert(0, align_info[0]['start'] / 2)
-                            insert_times.append(align_info[-1]['end']) # TODO: no last border info in align info.
-                            
-                            words_insert_indices.insert(0, 0)
-                            words_insert_indices.append(len(words))
-
-
-                        insert_times = np.array(insert_times, dtype=float)
-                        insert_frames_nominators = np.round((insert_times - self.splicing_config['frame_length'] / 2) / self.splicing_config['frame_shift']).astype(int)
-                        
-                        assert len(insert_frames_nominators) == len(words_insert_indices)
-                        insert_nominators = list(zip(insert_frames_nominators, words_insert_indices))
-
-                        
-
-                        if 'ratio_in_selected_positions' in self.splicing_config['configs']['insert']:
-                            raise NotImplementedError
-                            num_in_selected_positions = None
-                        elif 'num_in_selected_positions' in self.splicing_config['configs']['insert']:
-                            num_in_selected_positions = self.splicing_config['configs']['insert']['num_in_selected_positions']
-                            # 一个切分点只允许插入一次，防止排序算法导致标签乱序。
-                            
-                        else:
-                            raise TypeError
-
-                        if len(insert_frames_nominators) < num_in_selected_positions:
-                            logging.warning(f"Utter {uid} has none insertion points. Skipped.")
-                        else:
-                        
-                            insertions = [insert_nominators[k] for k in np.random.choice(len(insert_nominators), num_in_selected_positions, replace=False)]
-
-
-                            assert speech.shape[1] == 83 and len(speech.shape) == 2
-                            
-                            insert_frame_positions = [item[0] for item in insertions]
-                            insert_word_positions = [item[1] for item in insertions]
-                            speech_chunks: List[np.ndarray] = np.split(speech, insert_frame_positions, axis=TIME_AXIS)
-                            speech_chunks = LazyInserter(speech_chunks)
-
-                            audio_dictionary_index = self.splicing_info['audio_dictionary_index']
-                            audio_dictionary_book = self.splicing_info['audio_dictionary_book']
-
-                            if not hasattr(self, 'word_choicer'):
-                                self.word_choicer = PsudoRandomChoicer(self.splicing_info['words_to_insert'])
-
-                            insert_words = self.word_choicer.choice(num_in_selected_positions)
-                            insert_words = [item.lower() for item in insert_words]
-
-                            insert_audios = [audio_dictionary_index[item][np.random.choice(len(audio_dictionary_index[item]), 1)[0]] for item in insert_words]
-
-                            words = LazyInserter(words)
-                            if self.splicing_config['audio_dictionary_type'] == 'kaldi_ark':
-                                for ap, wp, insert_word, insert_audio in zip(range(1, len(speech_chunks.x)), insert_word_positions, insert_words, insert_audios):
-                                    uttid = insert_audio['uttid']
-                                    utt_feature_path = audio_dictionary_book[uttid]
-                                    utt_feature = kaldiio.load_mat(utt_feature_path)
-                                    assert utt_feature.shape[1] == speech.shape[1]
-                                    start_frame = np.round((insert_audio['start'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift'])
-                                    end_frame = np.round((insert_audio['end'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift'])
-                                    word_feature = utt_feature[int(start_frame):int(end_frame), :]
-                                    
-                                    speech_chunks.insert(ap, word_feature)
-                                    words.insert(wp, insert_word)
+                                # replace_words_pos = [list(self.splicing_data.nlp_eng(item).iter_tokens())[0].to_dict()[0]['upos'] if len(ENGLISH_SPAN_PATTERN.findall(item)) != 0 else list(self.splicing_data.nlp_chn(item).iter_tokens())[0].to_dict()[0]['upos'] for item in replace_words ]
                                 
-                                speech_chunks.apply()
-                                words.apply()
-                                speech_chunks = speech_chunks.x
-                                words = words.x
+                                replace_words_pos = [self.splicing_data.stanza_cache['oov'][item] for item in replace_word_indices]
+                                positions_to_replace_selected = []
+                                vacent_terms = list(zip(positions_to_replace, source_pos))
 
-                                words = [item.upper() for item in words]
-                                words = list(map(self.spm_encode_english, words))
-                                text = ' '.join(words)
-                                text = CHINESE_SPACE_PATTERN.sub('', text)
-                                text = CHINESE_BORDER_PATTERN.sub(' ', text)
+                                # Get valid 'positions_to_replace_selected'
+                                for replace_word, replace_word_pos in zip(replace_words, replace_words_pos):
+                                    if len(vacent_terms) == 0:
+                                        break
+                                    valid_nominators_indices = [i for i, item in enumerate(vacent_terms) if item[1] == replace_word_pos]
+                                    if len(valid_nominators_indices) == 0:
+                                        if self.splicing_config.configs.replace.force_replace_if_stanza_failed:
+                                            selected_vacent_idx = int(np.random.choice(len(vacent_terms), 1))
+                                            force_replaced = speech_chunk.words[vacent_terms[selected_vacent_idx][0]]
+                                            logging.warning(f'Word "{replace_word}" has no matched POS. Force replaced with "{force_replaced}".')
+                                        else:
+                                            logging.warning(f'Word "{replace_word}" has no matched POS. Skipped.')
+                                            continue
+                                    else:
+                                        selected_vacent_idx = valid_nominators_indices[int(np.random.choice(len(valid_nominators_indices), 1))]
+                                    
+                                    positions_to_replace_selected.append(vacent_terms[selected_vacent_idx][0])
+                                    del vacent_terms[selected_vacent_idx]
 
-                                speech = np.concatenate(speech_chunks, axis=0)
-
-                                data[self.speech_name] = speech
-                                data[self.text_name] = text
-
-                                # if len(self.word_choicer.x) - len(self.word_choicer.indices) <= 3:
-                                #     save_spliced(Path('/yelingxuan/espnet_experiments/datatang_oov_mutual/asr/exp/asr_train_debug/spliced'), 
-                                #                 uttid=uid, speech=speech, text=text, 
-                                #                 insert_words=insert_words, 
-                                #                 insert_word_positions=insert_frame_positions
-                                #     )
-
-
+                                pass
                             else:
-                                raise NotImplementedError
+                                positions_to_replace_selected = [positions_to_replace[i] for i in np.random.choice(len(positions_to_replace), replace_configs['num_in_selected_positions'], replace=False)]
+                            
+
+                            audio_dictionary_index = self.splicing_data.audio_dictionary_index
+                            audio_dictionary_book = self.splicing_data.audio_dictionary_book
+
+                            replace_audio_pos = [audio_dictionary_index[item][np.random.choice(len(audio_dictionary_index[item]), 1)[0]] for item in replace_words]
+                            replace_audios = []
+                            for audio_pos in replace_audio_pos:
+                                utt_feature_path = audio_dictionary_book[audio_pos['uttid']]
+                                utt_feature = kaldiio.load_mat(utt_feature_path)
+                                start_frame = int(np.round((audio_pos['start'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift']))
+                                end_frame = int(np.round((audio_pos['end'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift']))
+                                replace_audios.append(utt_feature[start_frame:end_frame, :])
+
+                            for index, audio, word in zip(positions_to_replace_selected, replace_audios, replace_words):
+                                speech_chunk[index] = (audio, word)
+
+                            speech = speech_chunk.speech
+                            words = [item.upper() for item in speech_chunk.words if len(item) > 0]
+                            words = list(map(self.splicing_data.spm_encode_english, words))
+                            text = ' '.join(words)
+                            text = CHINESE_SPACE_PATTERN.sub('', text)
+                            text = CHINESE_BORDER_PATTERN.sub(' ', text)
+
+                            data[self.speech_name] = speech
+                            data[self.text_name] = text
 
 
-        
+                if 'insert' in self.splicing_config['configs'] and self.splicing_config.configs.insert.prob > 0:
+                    raise NotImplementedError
                     
+
 
         if self.speech_name in data:
             if self.train and self.rirs is not None and self.noises is not None:

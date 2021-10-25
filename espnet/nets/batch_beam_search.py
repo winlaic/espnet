@@ -14,6 +14,43 @@ from espnet.nets.beam_search import BeamSearch
 from espnet.nets.beam_search import Hypothesis
 
 
+def show_current_scores(scores, partial_scores, weighted_scores, token_list: list, k=10):
+    import pandas as pd
+    from pandas import DataFrame
+    from itertools import chain
+
+    top_ids = weighted_scores.view(-1).argmax()
+    prev_hyp_ids = top_ids // weighted_scores.shape[-1]
+    # new_token_ids = top_ids % weighted_scores.shape[-1]
+
+    if prev_hyp_ids != 0:
+        print(f'Warning: Best hypo changed to {prev_hyp_ids}nd.')
+
+    ret = {}
+    for scorer, score in chain(scores.items(), partial_scores.items()):
+        current_score = score[prev_hyp_ids, :]
+        current_score = torch.exp(current_score)
+        top_values, top_indices = torch.topk(current_score, k=k)
+        top_indices = top_indices.tolist()
+        top_tokens = [token_list[i] for i in top_indices]
+        ret[scorer] = top_tokens
+        ret[scorer + '_scores'] = top_values
+
+    total_scores, total_indices = weighted_scores[prev_hyp_ids, :].topk(k)
+    total_scores = torch.exp(total_scores)
+    total_tokens = [token_list[i] for i in total_indices]
+
+    ret['total'] = total_tokens
+    ret['total_scores'] = total_scores
+
+    print(DataFrame(ret))
+    
+
+
+    
+    
+
+
 class BatchHypothesis(NamedTuple):
     """Batchfied/Vectorized hypothesis data type."""
 
@@ -223,7 +260,8 @@ class BatchBeamSearch(BeamSearch):
         )
         scores, states = self.score_full(running_hyps, x.expand(n_batch, *x.shape))
         for k in self.full_scorers:
-            weighted_scores += self.weights[k] * scores[k]
+            # weighted_scores += torch.log(self.weights[k] * torch.exp(scores[k]))
+            weighted_scores += self.weights[k] * scores[k] 
         # partial scoring
         if self.do_pre_beam:
             pre_beam_scores = (
@@ -237,12 +275,15 @@ class BatchBeamSearch(BeamSearch):
         # for others.
         part_scores, part_states = self.score_partial(running_hyps, part_ids, x)
         for k in self.part_scorers:
+            # weighted_scores += torch.log(self.weights[k] * torch.exp(part_scores[k]))
             weighted_scores += self.weights[k] * part_scores[k]
         # add previous hyp scores
         weighted_scores += running_hyps.score.to(
             dtype=x.dtype, device=x.device
         ).unsqueeze(1)
 
+        show_current_scores(scores, part_scores, weighted_scores, self.token_list, 20)
+        
         # TODO(karita): do not use list. use batch instead
         # see also https://github.com/espnet/espnet/pull/1402#discussion_r354561029
         # update hyps
@@ -281,6 +322,10 @@ class BatchBeamSearch(BeamSearch):
                     ),
                 )
             )
+        print(' '.join(self.token_list[i] for i in best_hyps[0].yseq))
+
+        if torch.tensor([item.score for item in best_hyps]).argmax() != 0:
+            print
         return self.batchfy(best_hyps)
 
     def post_process(
