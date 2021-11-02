@@ -83,6 +83,29 @@ class PsudoRandomChoicer:
         return ret, retincides
 
 
+# class GroupedPsudoRandomChoicer:
+#     def __init__(self, x, x_pos=None):
+#         self.x = x
+#         if x_pos is None:
+#             self.x_pos = ['NONE' for _ in x]
+#         self.x_librarys = {}
+#         self.reset()
+
+#     @property
+#     def pos_classes(self):
+#         return set(self.x_pos)
+
+#     def reset(self, pos=None):
+#         if pos is None:
+#             for pos in self.pos_classes:
+#                 self.reset(pos)
+#         self.x_librarys[pos] = [self.x[i] for i in range(len(self.x)) if self.x_pos[i] == pos]
+
+
+#     def choice(self, n, source=None, source_pos=None, source_idx=None):
+#         pass
+
+
 class LazyInserter:
     def __init__(self, x) -> None:
         self.x = x
@@ -559,6 +582,9 @@ class CommonPreprocessor(AbsPreprocessor):
                             positions_to_replace = speech_chunk.non_silence_chunk_indices
                         else:
                             raise NotImplementedError
+
+                        if replace_configs.english_only:
+                            positions_to_replace = [item for item in positions_to_replace if (len(ENGLISH_SPAN_PATTERN.findall(speech_chunk.words[item])) > 0)]
 
                         if len(positions_to_replace) < replace_configs['num_in_selected_positions']:
                             logging.warning(f"Utter {uid} has less than {replace_configs['num_in_selected_positions']}, ignored.")
