@@ -313,6 +313,7 @@ class AbsTask(ABC):
             default=1,
             help="The number of workers used for DataLoader",
         )
+        group.add_argument('--debug', action='store_true')
         group.add_argument(
             "--num_att_plot",
             type=int,
@@ -1143,10 +1144,9 @@ class AbsTask(ABC):
         if not distributed_option.distributed or distributed_option.dist_rank == 0:
             output_dir.mkdir(parents=True, exist_ok=True)
             with (output_dir / "config.yaml").open("w", encoding="utf-8") as f:
-                logging.info(
-                    f'Saving the configuration in {output_dir / "config.yaml"}'
-                )
+                logging.info(f'Saving configuration...')
                 yaml_no_alias_safe_dump(vars(args), f, indent=4, sort_keys=False)
+                logging.info(f'Saved configuration in {output_dir / "config.yaml"}')
 
         if args.dry_run:
             pass

@@ -86,6 +86,8 @@ class TrainerOptions:
     val_scheduler_criterion: Sequence[str]
     unused_parameters: bool
     wandb_model_log_interval: int
+    save_batch_texts: bool
+    debug: bool
 
 
 class Trainer:
@@ -198,6 +200,11 @@ class Trainer:
         else:
             scaler = None
 
+        if trainer_options.save_batch_texts:
+            cls.batch_text_log = (output_dir / f'batch_text.{distributed_option.dist_rank}.log').open('w', encoding='utf8')
+        else:
+            cls.batch_text_log = None
+
         if trainer_options.resume and (output_dir / "checkpoint.pth").exists():
             cls.resume(
                 checkpoint=output_dir / "checkpoint.pth",
@@ -254,6 +261,17 @@ class Trainer:
             summary_writer = SummaryWriter(str(output_dir / "tensorboard"))
         else:
             summary_writer = None
+
+        # if trainer_options.debug:
+        #     logging.info('Testing valid...')
+        #     with reporter.observe("valid") as sub_reporter:
+        #         cls.validate_one_epoch(
+        #             model=dp_model,
+        #             iterator=valid_iter_factory.build_iter(0),
+        #             reporter=sub_reporter,
+        #             options=trainer_options,
+        #             distributed_option=distributed_option,
+        #         )
 
         start_time = time.perf_counter()
         for iepoch in range(start_epoch, trainer_options.max_epoch + 1):
@@ -441,6 +459,9 @@ class Trainer:
                 nbest=keep_nbest_models,
             )
 
+        if cls.batch_text_log is not None:
+            cls.batch_text_log.close()
+
     @classmethod
     def train_one_epoch(
         cls,
@@ -466,7 +487,6 @@ class Trainer:
         use_wandb = options.use_wandb
         distributed = distributed_option.distributed
 
-        logging_batch = True
 
         if log_interval is None:
             try:
@@ -496,11 +516,11 @@ class Trainer:
                 all_steps_are_invalid = False
                 continue
 
-            if logging_batch:
-                # logging.info(f'Rank {distributed_option.dist_rank}: {uttids}')
+            if cls.batch_text_log is not None:
                 for uttid, token_ids, token_length in zip(uttids, batch['text'], batch['text_lengths']):
                     real_texts = ' '.join(iterator.dataset.preprocess.token_id_converter.ids2tokens(token_ids[:token_length]))
-                    logging.info(f"UTT={uttid}\tTEXT={real_texts}")
+                    cls.batch_text_log.write(f"{uttid}\t{real_texts}\n")
+                    cls.batch_text_log.flush()
 
             with autocast(scaler is not None):
                 with reporter.measure_time("forward_time"):

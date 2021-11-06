@@ -55,10 +55,10 @@ def save_spliced(path: Path, uttid, speech, text, insert_words, insert_word_posi
         f.write(text + '\n')
 
 
-logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s (%(module)s:%(lineno)d) %(levelname)s: %(message)s",
-    )
+# logging.basicConfig(
+#         level=logging.INFO,
+#         format="%(asctime)s (%(module)s:%(lineno)d) %(levelname)s: %(message)s",
+#     )
 
 class PsudoRandomChoicer:
     def __init__(self, x):
@@ -629,9 +629,9 @@ class CommonPreprocessor(AbsPreprocessor):
                                         if self.splicing_config.configs.replace.force_replace_if_stanza_failed:
                                             selected_vacent_idx = int(np.random.choice(len(vacent_terms), 1))
                                             force_replaced = speech_chunk.words[vacent_terms[selected_vacent_idx][0]]
-                                            logging.warning(f'Word "{replace_word}" has no matched POS. Force replaced with "{force_replaced}".')
+                                            logging.debug(f'Word "{replace_word}" has no matched POS. Force replaced with "{force_replaced}".')
                                         else:
-                                            logging.warning(f'Word "{replace_word}" has no matched POS. Skipped.')
+                                            logging.debug(f'Word "{replace_word}" has no matched POS. Skipped.')
                                             continue
                                     else:
                                         selected_vacent_idx = valid_nominators_indices[int(np.random.choice(len(valid_nominators_indices), 1))]
@@ -668,6 +668,10 @@ class CommonPreprocessor(AbsPreprocessor):
 
                             data[self.speech_name] = speech
                             data[self.text_name] = text
+
+                        data['splicing_replaced'] = np.array([True], dtype=bool)
+                    
+                    
 
 
                 if 'insert' in self.splicing_config['configs'] and self.splicing_config.configs.insert.prob > 0:
@@ -768,6 +772,9 @@ class CommonPreprocessor(AbsPreprocessor):
             tokens = self.tokenizer.text2tokens(text)
             text_ints = self.token_id_converter.tokens2ids(tokens)
             data[self.text_name] = np.array(text_ints, dtype=np.int64)
+
+        if 'splicing_replaced' not in data:
+            data['splicing_replaced'] = np.array([False], dtype=bool)
 
         assert check_return_type(data)
         return data

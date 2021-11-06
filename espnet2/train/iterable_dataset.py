@@ -80,6 +80,7 @@ class IterableESPnetDataset(IterableDataset):
         ] = None,
         float_dtype: str = "float32",
         int_dtype: str = "long",
+        bool_dtype: str = "bool",
         key_file: str = None,
     ):
         assert check_argument_types()
@@ -93,6 +94,7 @@ class IterableESPnetDataset(IterableDataset):
 
         self.float_dtype = float_dtype
         self.int_dtype = int_dtype
+        self.bool_dtype = bool_dtype
         self.key_file = key_file
 
         self.debug_info = {}
@@ -227,6 +229,8 @@ class IterableESPnetDataset(IterableDataset):
                     value = value.astype(self.float_dtype)
                 elif value.dtype.kind == "i":
                     value = value.astype(self.int_dtype)
+                elif value.dtype.kind == 'b':
+                    value = value.astype(self.bool_dtype)
                 else:
                     raise NotImplementedError(f"Not supported dtype: {value.dtype}")
                 data[name] = value

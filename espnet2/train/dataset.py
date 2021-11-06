@@ -289,6 +289,7 @@ class ESPnetDataset(AbsDataset):
         ] = None,
         float_dtype: str = "float32",
         int_dtype: str = "long",
+        bool_dtype: str = 'bool',
         max_cache_size: Union[float, int, str] = 0.0,
         max_cache_fd: int = 0,
     ):
@@ -303,6 +304,7 @@ class ESPnetDataset(AbsDataset):
 
         self.float_dtype = float_dtype
         self.int_dtype = int_dtype
+        self.bool_dtype = bool_dtype
         self.max_cache_fd = max_cache_fd
 
         self.loader_dict = {}
@@ -441,6 +443,8 @@ class ESPnetDataset(AbsDataset):
                 value = value.astype(self.float_dtype)
             elif value.dtype.kind == "i":
                 value = value.astype(self.int_dtype)
+            elif value.dtype.kind == 'b':
+                value = value.astype(self.bool_dtype)
             else:
                 raise NotImplementedError(f"Not supported dtype: {value.dtype}")
             data[name] = value

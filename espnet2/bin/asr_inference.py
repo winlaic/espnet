@@ -370,6 +370,7 @@ def inference(
     # FIXME(kamo): The output format should be discussed about
     with DatadirWriter(output_dir) as writer:
         for keys, batch in loader:
+            batch = {k: v for k, v in batch.items() if k.startswith('speech')}
             assert isinstance(batch, dict), type(batch)
             assert all(isinstance(s, str) for s in keys), keys
             _bs = len(next(iter(batch.values())))

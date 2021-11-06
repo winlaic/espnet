@@ -61,6 +61,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
+        replaced_loss_weight: float = 1.0,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -74,6 +75,7 @@ class ESPnetASRModel(AbsESPnetModel):
         self.ignore_id = ignore_id
         self.ctc_weight = ctc_weight
         self.token_list = token_list.copy()
+        self.replaced_loss_weight = replaced_loss_weight
 
         self.frontend = frontend
         self.specaug = specaug
@@ -116,6 +118,8 @@ class ESPnetASRModel(AbsESPnetModel):
         speech_lengths: torch.Tensor,
         text: torch.Tensor,
         text_lengths: torch.Tensor,
+        splicing_replaced = None,
+        splicing_replaced_lengths = None,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """Frontend + Encoder + Decoder + Calc loss
 
@@ -135,6 +139,15 @@ class ESPnetASRModel(AbsESPnetModel):
         ), (speech.shape, speech_lengths.shape, text.shape, text_lengths.shape)
         batch_size = speech.shape[0]
 
+
+        if self.training and (splicing_replaced is not None) and (self.replaced_loss_weight != 1.0):
+            splicing_replaced = splicing_replaced.flatten()
+            sample_weights = speech.new_ones((batch_size, ), dtype=float, requires_grad=False)
+            assert splicing_replaced.shape == sample_weights.shape
+            sample_weights = sample_weights.masked_fill(splicing_replaced, self.replaced_loss_weight)
+        else:
+            sample_weights = None
+
         # for data-parallel
         text = text[:, : text_lengths.max()]
 
@@ -146,7 +159,7 @@ class ESPnetASRModel(AbsESPnetModel):
             loss_att, acc_att, cer_att, wer_att = None, None, None, None
         else:
             loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                encoder_out, encoder_out_lens, text, text_lengths
+                encoder_out, encoder_out_lens, text, text_lengths, sample_weights=sample_weights
             )
 
         # 2b. CTC branch
@@ -154,7 +167,7 @@ class ESPnetASRModel(AbsESPnetModel):
             loss_ctc, cer_ctc = None, None
         else:
             loss_ctc, cer_ctc = self._calc_ctc_loss(
-                encoder_out, encoder_out_lens, text, text_lengths
+                encoder_out, encoder_out_lens, text, text_lengths, sample_weights=sample_weights
             )
 
         # 2c. RNN-T branch
@@ -273,6 +286,7 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        sample_weights = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
@@ -283,7 +297,7 @@ class ESPnetASRModel(AbsESPnetModel):
         )
 
         # 2. Compute attention loss
-        loss_att = self.criterion_att(decoder_out, ys_out_pad)
+        loss_att = self.criterion_att(decoder_out, ys_out_pad, sample_weights=sample_weights)
         acc_att = th_accuracy(
             decoder_out.view(-1, self.vocab_size),
             ys_out_pad,
@@ -305,9 +319,10 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        sample_weights = None,
     ):
         # Calc CTC loss
-        loss_ctc = self.ctc(encoder_out, encoder_out_lens, ys_pad, ys_pad_lens)
+        loss_ctc = self.ctc(encoder_out, encoder_out_lens, ys_pad, ys_pad_lens, sample_weights=sample_weights)
 
         # Calc CER using CTC
         cer_ctc = None

@@ -48,7 +48,7 @@ class CTC(torch.nn.Module):
 
         self.reduce = reduce
 
-    def loss_fn(self, th_pred, th_target, th_ilen, th_olen) -> torch.Tensor:
+    def loss_fn(self, th_pred, th_target, th_ilen, th_olen, sample_weights=None) -> torch.Tensor:
         if self.ctc_type == "builtin":
             th_pred = th_pred.log_softmax(2)
             loss = self.ctc_loss(th_pred, th_target, th_ilen, th_olen)
@@ -92,8 +92,15 @@ class CTC(torch.nn.Module):
                         th_ilen[indices],
                         th_olen[indices],
                     )
+
+                    if sample_weights is not None:
+                        sample_weights = sample_weights[indices]
+                        
             else:
                 size = th_pred.size(1)
+
+            if sample_weights is not None:
+                loss = loss * sample_weights
 
             if self.reduce:
                 # Batch-size average
@@ -103,6 +110,10 @@ class CTC(torch.nn.Module):
             return loss
 
         elif self.ctc_type == "warpctc":
+
+            if sample_weights is not None:
+                raise NotImplementedError
+
             # warpctc only supports float32
             th_pred = th_pred.to(dtype=torch.float32)
 
@@ -119,7 +130,7 @@ class CTC(torch.nn.Module):
         else:
             raise NotImplementedError
 
-    def forward(self, hs_pad, hlens, ys_pad, ys_lens):
+    def forward(self, hs_pad, hlens, ys_pad, ys_lens, sample_weights=None):
         """Calculate CTC loss.
 
         Args:
@@ -136,7 +147,7 @@ class CTC(torch.nn.Module):
         # (B, L) -> (BxL,)
         ys_true = torch.cat([ys_pad[i, :l] for i, l in enumerate(ys_lens)])
 
-        loss = self.loss_fn(ys_hat, ys_true, hlens, ys_lens).to(
+        loss = self.loss_fn(ys_hat, ys_true, hlens, ys_lens, sample_weights=sample_weights).to(
             device=hs_pad.device, dtype=hs_pad.dtype
         )
 
