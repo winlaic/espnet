@@ -313,6 +313,7 @@ class AbsTask(ABC):
             default=1,
             help="The number of workers used for DataLoader",
         )
+        group.add_argument('--debug', action='store_true')
         group.add_argument(
             "--num_att_plot",
             type=int,

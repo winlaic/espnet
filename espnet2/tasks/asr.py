@@ -301,6 +301,12 @@ class ASRTask(AbsTask):
             default=None,
         )
 
+        parser.add_argument(
+            '--save_batch_texts',
+            type=bool,
+            default=False
+        )
+
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
             # e.g. --encoder and --encoder_conf
