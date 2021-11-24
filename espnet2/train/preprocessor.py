@@ -318,6 +318,10 @@ class SpeechChunk:
 
         assert len(self.chunks) == len(self.words)
 
+    def range(self, index):
+        start = sum(item.shape[0] for item in self.chunks[:index])
+        return (start, start + self.chunks[index].shape[0])
+
     def __len__(self):
         return len(self.chunks)
 
@@ -552,6 +556,8 @@ class CommonPreprocessor(AbsPreprocessor):
 
             align_info = self.splicing_data.source_align_info.get(uid, None)
 
+            replaced_positions = []
+
             if align_info is None:
                 logging.warning(f"Utter {uid} has no align info, skipped insertion.")
             else:
@@ -575,6 +581,7 @@ class CommonPreprocessor(AbsPreprocessor):
 
                 if 'replace' in self.splicing_config['configs']:
                     replace_configs = self.splicing_config['configs']['replace']
+                    
                     if np.random.random() < replace_configs['prob']:
                     # if True:
                         words_to_replace = self.splicing_data.words_to_replace
@@ -656,8 +663,10 @@ class CommonPreprocessor(AbsPreprocessor):
                                 end_frame = int(np.round((audio_pos['end'] - self.splicing_config['frame_length'] / 2 ) / self.splicing_config['frame_shift']))
                                 replace_audios.append(utt_feature[start_frame:end_frame, :])
 
+                            
                             for index, audio, word in zip(positions_to_replace_selected, replace_audios, replace_words):
                                 speech_chunk[index] = (audio, word)
+                                replaced_positions.append(speech_chunk.range(index))
 
                             speech = speech_chunk.speech
                             words = [item.upper() for item in speech_chunk.words if len(item) > 0]
@@ -670,9 +679,14 @@ class CommonPreprocessor(AbsPreprocessor):
                             data[self.text_name] = text
 
 
+            
+
+
+
                 if 'insert' in self.splicing_config['configs'] and self.splicing_config.configs.insert.prob > 0:
                     raise NotImplementedError
-                    
+        
+            data['replaced_positions'] = np.array(replaced_positions) if len(replaced_positions) > 0 else np.zeros((0, 2))
 
 
         if self.speech_name in data:

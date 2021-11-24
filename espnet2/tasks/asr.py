@@ -143,6 +143,17 @@ decoder_choices = ClassChoices(
     default="rnn",
 )
 
+import torch.nn
+
+adapter_choices = ClassChoices(
+    "adapter",
+    classes=dict(
+        linear=torch.nn.Linear
+    ),
+    default=None
+)
+
+
 
 class ASRTask(AbsTask):
     # If you need more than one optimizers, change this value
@@ -164,6 +175,7 @@ class ASRTask(AbsTask):
         postencoder_choices,
         # --decoder and --decoder_conf
         decoder_choices,
+        adapter_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -463,6 +475,12 @@ class ASRTask(AbsTask):
         # 7. RNN-T Decoder (Not implemented)
         rnnt_decoder = None
 
+        if getattr(args, 'adapter', None) is not None:
+            adapter_class = adapter_choices.get_class(args.adapter)
+            adapter = adapter_class(**args.adapter_conf)
+        else:
+            adapter = None
+
         # 8. Build model
         model = ESPnetASRModel(
             vocab_size=vocab_size,
@@ -476,6 +494,7 @@ class ASRTask(AbsTask):
             ctc=ctc,
             rnnt_decoder=rnnt_decoder,
             token_list=token_list,
+            adapter=adapter,
             **args.model_conf,
         )
 

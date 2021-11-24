@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from distutils.version import LooseVersion
 import logging
+from os import replace
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -8,6 +9,7 @@ from typing import Tuple
 from typing import Union
 
 import torch
+import torch.nn
 from typeguard import check_argument_types
 
 from espnet.nets.e2e_asr_common import ErrorCalculator
@@ -52,6 +54,7 @@ class ESPnetASRModel(AbsESPnetModel):
         decoder: AbsDecoder,
         ctc: CTC,
         rnnt_decoder: None,
+        adapter: torch.nn.Module = None,
         ctc_weight: float = 0.5,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
@@ -101,6 +104,8 @@ class ESPnetASRModel(AbsESPnetModel):
             normalize_length=length_normalized_loss,
         )
 
+        self.adapter = adapter
+
         if report_cer or report_wer:
             self.error_calculator = ErrorCalculator(
                 token_list, sym_space, sym_blank, report_cer, report_wer
@@ -116,6 +121,7 @@ class ESPnetASRModel(AbsESPnetModel):
         speech_lengths: torch.Tensor,
         text: torch.Tensor,
         text_lengths: torch.Tensor,
+        **kwargs
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """Frontend + Encoder + Decoder + Calc loss
 
@@ -137,6 +143,26 @@ class ESPnetASRModel(AbsESPnetModel):
 
         # for data-parallel
         text = text[:, : text_lengths.max()]
+
+        kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
+        if self.training and self.adapter is not None:
+            _batch_size, _time, _feat_dim = speech.shape
+            abs_scatter_pos = []
+            for i, rgs in enumerate(kwargs['replaced_positions']):
+                for rg in rgs:
+                    if rg[1] - rg[0] != 0:
+                        abs_scatter_pos.extend(list(range(i*_time + rg[0], i*_time + rg[1])))
+            speech = speech.view(-1, _feat_dim)
+            replaced_speech = speech[abs_scatter_pos]
+            replaced_speech = self.adapter(replaced_speech)
+            speech[abs_scatter_pos] = replaced_speech
+            speech = speech.view(_batch_size, _time, _feat_dim)
+            # for i, rgs in enumerate(kwargs['replaced_positions']):
+            #     for rg in rgs:
+            #         if rg[1] - rg[0] != 0:
+            #             speech[i, rg[0]:rg[1], :] = self.adapter(speech[i, rg[0]:rg[1]])
+
+
 
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)

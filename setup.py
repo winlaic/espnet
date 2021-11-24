@@ -21,6 +21,9 @@ requirements = {
         "editdistance==0.5.2",
         "ctc-segmentation<1.8,>=1.6.6",
         "wandb",
+        "stanza",
+        "jieba",
+        "omegaconf",
         "filelock",
         # DNN related packages are installed by Makefile
         # 'torch==1.0.1'
