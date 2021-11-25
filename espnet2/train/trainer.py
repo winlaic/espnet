@@ -88,6 +88,7 @@ class TrainerOptions:
     wandb_model_log_interval: int
     save_batch_texts: bool
     debug: bool
+    validate_before_train: bool
 
 
 
@@ -126,6 +127,7 @@ class Trainer:
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser):
         """Reserved for future development of another Trainer"""
+        parser.add_argument('--validate_before_train', action='store_true')
         pass
 
     @staticmethod
@@ -166,7 +168,7 @@ class Trainer:
         train_iter_factory: AbsIterFactory,
         valid_iter_factory: AbsIterFactory,
         plot_attention_iter_factory: Optional[AbsIterFactory],
-        trainer_options,
+        trainer_options: TrainerOptions,
         distributed_option: DistributedOption,
     ) -> None:
         """Perform training. This method performs the main process of training."""
@@ -262,6 +264,17 @@ class Trainer:
             summary_writer = SummaryWriter(str(output_dir / "tensorboard"))
         else:
             summary_writer = None
+
+        if trainer_options.validate_before_train:
+            logging.info('Performing validation before train.')
+            with reporter.observe("valid") as sub_reporter:
+                cls.validate_one_epoch(
+                    model=dp_model,
+                    iterator=valid_iter_factory.build_iter(0),
+                    reporter=sub_reporter,
+                    options=trainer_options,
+                    distributed_option=distributed_option,
+                )
 
         start_time = time.perf_counter()
         for iepoch in range(start_epoch, trainer_options.max_epoch + 1):

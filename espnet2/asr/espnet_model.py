@@ -144,8 +144,9 @@ class ESPnetASRModel(AbsESPnetModel):
         # for data-parallel
         text = text[:, : text_lengths.max()]
 
-        kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
+        
         if self.training and self.adapter is not None:
+            kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
             _batch_size, _time, _feat_dim = speech.shape
             abs_scatter_pos = []
             for i, rgs in enumerate(kwargs['replaced_positions']):
