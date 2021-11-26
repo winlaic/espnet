@@ -145,13 +145,28 @@ decoder_choices = ClassChoices(
 
 import torch.nn
 
+class LinearAdapter(torch.nn.Module):
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__()
+        self.linear = torch.nn.Linear(in_features=in_features, out_features=out_features, bias=bias)
+        self.espnet_initialization_fn()
+
+    def espnet_initialization_fn(self):
+        torch.nn.init.eye_(self.linear.weight)
+        torch.nn.init.zeros_(self.linear.bias)
+
+    def forward(self, x):
+        return self.linear(x)
+
 adapter_choices = ClassChoices(
     "adapter",
     classes=dict(
-        linear=torch.nn.Linear
+        linear=LinearAdapter
     ),
     default=None
 )
+
+
 
 
 
