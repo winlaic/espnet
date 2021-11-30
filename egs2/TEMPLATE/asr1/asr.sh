@@ -61,6 +61,7 @@ sos_eos="<sos/eos>" # sos and eos symbole
 bpe_input_sentence_size=100000000 # Size of input sentence for BPE.
 bpe_nlsyms=         # non-linguistic symbols list, separated by a comma, for BPE
 bpe_char_cover=1.0  # character coverage when modeling BPE
+huggingface_tokenizer_file=
 
 # Ngram model related
 use_ngram=false
@@ -288,12 +289,20 @@ wordtoken_list="${token_listdir}"/word/tokens.txt
 
 if [ "${token_type}" = bpe ]; then
     token_list="${bpetoken_list}"
+    huggingface_tokenizer_file=none
 elif [ "${token_type}" = char ]; then
     token_list="${chartoken_list}"
     bpemodel=none
+    huggingface_tokenizer_file=none
 elif [ "${token_type}" = word ]; then
     token_list="${wordtoken_list}"
     bpemodel=none
+    huggingface_tokenizer_file=none
+elif [ "${token_type}" = huggingface ]; then
+    token_list="${huggingface_tokenizer_file%.*}.token_list"
+    bpemodel=none
+    huggingface_tokenizer_file_name=${huggingface_tokenizer_file##*/}
+    huggingface_tokenizer_file_stem=${huggingface_tokenizer_file_name%%.*}
 else
     log "Error: not supported --token_type '${token_type}'"
     exit 2
@@ -324,6 +333,9 @@ if [ -z "${asr_tag}" ]; then
     fi
     if [ "${token_type}" = bpe ]; then
         asr_tag+="${nbpe}"
+    fi
+    if [ "${token_type}" = huggingface ]; then
+        asr_tag+="_${huggingface_tokenizer_file_stem}"
     fi
     # Add overwritten arg's info
     if [ -n "${asr_args}" ]; then
@@ -362,6 +374,9 @@ if [ -z "${asr_stats_dir}" ]; then
     fi
     if [ "${token_type}" = bpe ]; then
         asr_stats_dir+="${nbpe}"
+    fi
+    if [ "${token_type}" = huggingface ]; then
+        asr_stats_dir+="_${huggingface_tokenizer_file_stem}"
     fi
     if [ -n "${speed_perturb_factors}" ]; then
         asr_stats_dir+="_sp"
@@ -525,7 +540,7 @@ if ! "${skip_data_prep}"; then
                     _suf=""
                 fi
                 # Generate dummy wav.scp to avoid error by copy_data_dir.sh
-                <data/"${dset}"/cmvn.scp awk ' { print($1,"<DUMMY>") }' > data/"${dset}"/wav.scp
+                <data/"${dset}"/utt2spk awk ' { print($1,"<DUMMY>") }' > data/"${dset}"/wav.scp
                 utils/copy_data_dir.sh --validate_opts --non-print data/"${dset}" "${data_feats}${_suf}/${dset}"
 
                 # Derive the the frame length and feature dimension
@@ -658,7 +673,8 @@ if ! "${skip_data_prep}"; then
                 --add_symbol "${blank}:0" \
                 --add_symbol "${oov}:1" \
                 --add_symbol "${sos_eos}:-1"
-
+        elif [ "${token_type}" = huggingface ]; then
+            log "Stage 5: Using huggingface tokenizer from $huggingface_tokenizer_file_stem."
         else
             log "Error: not supported --token_type '${token_type}'"
             exit 2
@@ -950,6 +966,7 @@ if ! "${skip_train}"; then
                 --use_preprocessor true \
                 --bpemodel "${bpemodel}" \
                 --token_type "${token_type}" \
+                --huggingface_tokenizer_file "${huggingface_tokenizer_file}" \
                 --token_list "${token_list}" \
                 --non_linguistic_symbols "${nlsyms_txt}" \
                 --cleaner "${cleaner}" \
@@ -1077,6 +1094,7 @@ if ! "${skip_train}"; then
                 --bpemodel "${bpemodel}" \
                 --token_type "${token_type}" \
                 --token_list "${token_list}" \
+                --huggingface_tokenizer_file "${huggingface_tokenizer_file}" \
                 --non_linguistic_symbols "${nlsyms_txt}" \
                 --cleaner "${cleaner}" \
                 --g2p "${g2p}" \

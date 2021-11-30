@@ -9,6 +9,7 @@ from espnet2.text.char_tokenizer import CharTokenizer
 from espnet2.text.phoneme_tokenizer import PhonemeTokenizer
 from espnet2.text.sentencepiece_tokenizer import SentencepiecesTokenizer
 from espnet2.text.word_tokenizer import WordTokenizer
+from espnet2.text.huggingface_tokenizer import HuggingFaceTokenizer
 
 
 def build_tokenizer(
@@ -19,6 +20,7 @@ def build_tokenizer(
     space_symbol: str = "<space>",
     delimiter: str = None,
     g2p_type: str = None,
+    huggingface_tokenizer_file: str = None,
 ) -> AbsTokenizer:
     """A helper function to instantiate Tokenizer"""
     assert check_argument_types()
@@ -55,6 +57,10 @@ def build_tokenizer(
             non_linguistic_symbols=non_linguistic_symbols,
             space_symbol=space_symbol,
             remove_non_linguistic_symbols=remove_non_linguistic_symbols,
+        )
+    elif token_type == "huggingface":
+        return HuggingFaceTokenizer(
+            model_file=huggingface_tokenizer_file
         )
     else:
         raise ValueError(
