@@ -31,7 +31,7 @@ class HuggingFaceTokenizer(AbsTokenizer):
         return self.tokenizer.encode(line).tokens
 
     def tokens2text(self, tokens: Iterable[str]) -> str:
-        return self.tokenizer.decode(self.tokenizer.token_to_id(tokens))
+        return self.tokenizer.decode([self.tokenizer.token_to_id(token) for token in tokens])
 
     def get_num_vocabulary_size(self) -> int:
         return self.tokenizer.get_vocab_size()

@@ -59,6 +59,7 @@ class Speech2Text:
         ngram_file: Union[Path, str] = None,
         token_type: str = None,
         bpemodel: str = None,
+        huggingface_tokenizer_file: str = None,
         device: str = "cpu",
         maxlenratio: float = 0.0,
         minlenratio: float = 0.0,
@@ -162,16 +163,25 @@ class Speech2Text:
         if bpemodel is None:
             bpemodel = asr_train_args.bpemodel
 
+        if huggingface_tokenizer_file is None:
+            huggingface_tokenizer_file = asr_train_args.huggingface_tokenizer_file
+
         if token_type is None:
             tokenizer = None
-        elif token_type == "bpe":
-            if bpemodel is not None:
-                tokenizer = build_tokenizer(token_type=token_type, bpemodel=bpemodel)
-            else:
-                tokenizer = None
         else:
-            tokenizer = build_tokenizer(token_type=token_type)
-        converter = TokenIDConverter(token_list=token_list)
+            if token_type != 'huggingface':
+                if token_type == "bpe":
+                    if bpemodel is not None:
+                        tokenizer = build_tokenizer(token_type=token_type, bpemodel=bpemodel)
+                    else:
+                        tokenizer = None
+                else:
+                    tokenizer = build_tokenizer(token_type=token_type)
+                converter = TokenIDConverter(token_list=token_list)
+            else:
+                tokenizer = build_tokenizer(token_type=token_type, huggingface_tokenizer_file=huggingface_tokenizer_file)
+                converter = tokenizer
+
         logging.info(f"Text tokenizer: {tokenizer}")
 
         self.asr_model = asr_model
@@ -303,6 +313,7 @@ def inference(
     model_tag: Optional[str],
     token_type: Optional[str],
     bpemodel: Optional[str],
+    huggingface_tokenizer_file: Optional[str],
     allow_variable_data_keys: bool,
     streaming: bool,
 ):
@@ -336,6 +347,7 @@ def inference(
         ngram_file=ngram_file,
         token_type=token_type,
         bpemodel=bpemodel,
+        huggingface_tokenizer_file=huggingface_tokenizer_file,
         device=device,
         maxlenratio=maxlenratio,
         minlenratio=minlenratio,
@@ -541,6 +553,11 @@ def get_parser():
         default=None,
         help="The model path of sentencepiece. "
         "If not given, refers from the training args",
+    )
+    group.add_argument(
+        '--huggingface_tokenizer_file',
+        type=str_or_none,
+        default=None
     )
 
     return parser
