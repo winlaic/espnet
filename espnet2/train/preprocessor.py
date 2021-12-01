@@ -25,6 +25,7 @@ from functools import partial
 import re
 import logging
 from pathlib import Path
+from espnet2.text.huggingface_tokenizer import HuggingFaceTokenizer
 
 
 def kill(key, self):
@@ -485,7 +486,9 @@ class CommonPreprocessor(AbsPreprocessor):
             else:
                 raise NotImplementedError
 
-            if self.splicing_config.bpe_model is not None:
+
+
+            if hasattr(self.splicing_config, 'bpe_model') and (self.splicing_config.bpe_model is not None):
                 self.splicing_data.bpe_model = sentencepiece.SentencePieceProcessor()
                 self.splicing_data.bpe_model.Load(self.splicing_config.bpe_model)
                 self.splicing_data.spm_encode_english = partial(spm_encode_english, model=self.splicing_data.bpe_model)
@@ -570,20 +573,20 @@ class CommonPreprocessor(AbsPreprocessor):
             if align_info is None:
                 logging.warning(f"Utter {uid} has no align info, skipped insertion.")
             else:
-                if self.splicing_data.bpe_model is not None:
+                if hasattr(self.splicing_data, 'bpe_model') and (self.splicing_data.bpe_model is not None):
                     squeezed_text = ENGLISH_WORD_PATTERN.sub(lambda x: self.splicing_data.bpe_model.DecodePieces(x[0].split(' ')), text)
                     squeezed_text = CHINESE_SPACE_PATTERN.sub('', squeezed_text)
-                    align_info_text = ' '.join(item['text'].upper() for item in align_info)
-                    align_info_text = CHINESE_SPACE_PATTERN.sub('', align_info_text)
-                    assert squeezed_text == align_info_text, (squeezed_text, align_info_text)
-
-                    # From here we can confirm that align info is correspoding with tokenized text.
-                    # text variable is not useful here.
-
-
+                elif isinstance(self.tokenizer, HuggingFaceTokenizer):
+                    squeezed_text = CHINESE_SPACE_PATTERN.sub('', text)
                 else:
                     raise NotImplementedError
 
+                align_info_text = ' '.join(item['text'].upper() for item in align_info)
+                align_info_text = CHINESE_SPACE_PATTERN.sub('', align_info_text)
+                assert squeezed_text == align_info_text, (squeezed_text, align_info_text)
+
+                # From here we can confirm that align info is correspoding with tokenized text.
+                # text variable is not useful here.
 
                 speech_chunk = SpeechChunk(speech, align_info)
 
@@ -679,10 +682,15 @@ class CommonPreprocessor(AbsPreprocessor):
 
                             speech = speech_chunk.speech
                             words = [item.upper() for item in speech_chunk.words if len(item) > 0]
-                            words = list(map(self.splicing_data.spm_encode_english, words))
-                            text = ' '.join(words)
-                            text = CHINESE_SPACE_PATTERN.sub('', text)
-                            text = CHINESE_BORDER_PATTERN.sub(' ', text)
+
+                            if not isinstance(self.tokenizer, HuggingFaceTokenizer):
+                                words = list(map(self.splicing_data.spm_encode_english, words))
+                                text = ' '.join(words)
+                                text = CHINESE_SPACE_PATTERN.sub('', text)
+                                text = CHINESE_BORDER_PATTERN.sub(' ', text)
+                            else:
+                                text = ' '.join(words)
+                                text = CHINESE_BORDER_PATTERN.sub(' ', text)
 
                             data[self.speech_name] = speech
                             data[self.text_name] = text
