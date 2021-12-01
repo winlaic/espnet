@@ -27,6 +27,31 @@ import logging
 from pathlib import Path
 from espnet2.text.huggingface_tokenizer import HuggingFaceTokenizer
 
+# About UPOS
+# https://universaldependencies.org/u/pos/
+
+POS_SIMPLIFY_MAPPER = {
+    'ADJ': 'ADJ',
+    'NOUN': 'NOUN',
+    'PRON': 'NOUN',
+    'PROPN': 'NOUN',
+    'VERB': 'VERB',
+}
+
+from collections import defaultdict
+
+def sorted_dict(d, reverse=True):
+    return dict(sorted(d.items(), key=lambda x: x[1], reverse=reverse))
+
+def pos_determinator(all_cased_pos):
+    poll = defaultdict(float)
+    for k, v in all_cased_pos.items():
+        poll[v] += 1.0
+
+    ret = list(sorted_dict(poll, reverse=True).keys())[0]
+    return ret
+
+
 
 def kill(key, self):
     align_info = self.splicing_data.source_align_info[key]
@@ -507,41 +532,14 @@ class CommonPreprocessor(AbsPreprocessor):
                     self.splicing_data.words_to_replace = json.load(f)
 
             if self.splicing_config.stanza:
-                import stanza, pickle
-                from tqdm import tqdm
-                stanza_cache_path = Path(self.splicing_config.stanza_cache_file)
-                if not stanza_cache_path.exists():
+                stanza_train_text_pos = Path(self.splicing_config.stanza_train_text_pos)
+                with stanza_train_text_pos.open('rb') as f:
+                    self.splicing_data.stanza_train_text_pos = json.load(f)
 
-                    raise NotImplementedError
-                    stanza_cache = {'source': {}, 'oov': []}
-                    self.splicing_data.nlp_chn = stanza.Pipeline(lang='zh', use_gpu=True, package='gsdsimp')
-                    self.splicing_data.nlp_eng = stanza.Pipeline(lang='en', use_gpu=True, package='combined')
 
-                    for key, align_info in tqdm(self.splicing_data.source_align_info.items()):
-                        source_text_tokens = ' '.join([item['text'] for item in align_info])
-                        source_text_parsed = self.splicing_data.nlp_chn(source_text_tokens)
-                        source_pos = [item.to_dict()[0]['upos'] for item in source_text_parsed.iter_tokens()]
-
-                        # Change english slices use english model.
-                        source_pos_eng_spans = Xspans(source_pos)
-                        for eng_spans_slice in source_pos_eng_spans:
-                            eng_span = source_text_tokens.split(' ')[eng_spans_slice]
-                            eng_span = ' '.join(eng_span)
-                            eng_span_parsed = self.splicing_data.nlp_eng(eng_span)
-                            source_pos[eng_spans_slice] = [item.to_dict()[0]['upos'] for item in eng_span_parsed.iter_tokens()]
-
-                        stanza_cache['source'][key] = source_pos
-
-                    stanza_cache['oov'] = [list(self.splicing_data.nlp_eng(item).iter_tokens())[0].to_dict()[0]['upos'] if len(ENGLISH_SPAN_PATTERN.findall(item)) != 0 else list(self.splicing_data.nlp_chn(item).iter_tokens())[0].to_dict()[0]['upos'] for item in self.splicing_data.words_to_replace]
-
-                    with stanza_cache_path.open('wb') as f:
-                        pickle.dump(stanza_cache, f)
-                    self.splicing_data.stanza_cache = stanza_cache
-
-                else:
-                    with stanza_cache_path.open('rb') as f:
-                        self.splicing_data.stanza_cache = pickle.load(f)
-
+                stanza_oov_pos = Path(self.splicing_config.stanza_oov_pos)
+                with stanza_oov_pos.open('rb') as f:
+                    self.splicing_data.stanza_oov_pos = json.load(f)
 
 
         else:
@@ -559,12 +557,6 @@ class CommonPreprocessor(AbsPreprocessor):
         if self.splicing_config is not None:
             text: str = data[self.text_name]
             speech: np.ndarray = data[self.speech_name] # (time, channel)
-
-            # save_spliced(Path('/yelingxuan/espnet_experiments/datatang_oov_mutual/asr/exp/asr_train_debug/whole'), 
-            #                                     uttid=uid, speech=speech, text=text, 
-            #                                     insert_words=[], 
-            #                                     insert_word_positions=[]
-            #                         )
 
             align_info = self.splicing_data.source_align_info.get(uid, None)
 
@@ -594,8 +586,8 @@ class CommonPreprocessor(AbsPreprocessor):
                 if 'replace' in self.splicing_config['configs']:
                     replace_configs = self.splicing_config['configs']['replace']
                     
-                    if np.random.random() < replace_configs['prob']:
-                    # if True:
+                    # if np.random.random() < replace_configs['prob']:
+                    if True:
                         words_to_replace = self.splicing_data.words_to_replace
                         if replace_configs['position'] == 'all':
                             positions_to_replace = speech_chunk.non_silence_chunk_indices
@@ -613,29 +605,22 @@ class CommonPreprocessor(AbsPreprocessor):
                                 self.replace_word_choicer = PsudoRandomChoicer(words_to_replace)
 
                             replace_words, replace_word_indices = self.replace_word_choicer.choice(replace_configs['num_in_selected_positions'])
-                            replace_words = [item.lower() for item in replace_words]
+                            # replace_words = [item.lower() for item in replace_words]
 
                             if self.splicing_config.configs.replace.use_stanza:
 
-                                # Firstly use chinese model to tag pos.
-                                # source_text_tokens = ' '.join([item['text'] for item in align_info])
-                                # source_text_parsed = self.splicing_data.nlp_chn(source_text_tokens)
-                                # source_pos = [item.to_dict()[0]['upos'] for item in source_text_parsed.iter_tokens()]
-
-                                # # Change english slices use english model.
-                                # source_pos_eng_spans = Xspans(source_pos)
-                                # for eng_spans_slice in source_pos_eng_spans:
-                                #     eng_span = source_text_tokens.split(' ')[eng_spans_slice]
-                                #     eng_span = ' '.join(eng_span)
-                                #     eng_span_parsed = self.splicing_data.nlp_eng(eng_span)
-                                #     source_pos[eng_spans_slice] = [item.to_dict()[0]['upos'] for item in eng_span_parsed.iter_tokens()]
-
-                                source_pos = self.splicing_data.stanza_cache['source'][uid]
-
+                                source_pos = self.splicing_data.stanza_train_text_pos[uid]
 
                                 # replace_words_pos = [list(self.splicing_data.nlp_eng(item).iter_tokens())[0].to_dict()[0]['upos'] if len(ENGLISH_SPAN_PATTERN.findall(item)) != 0 else list(self.splicing_data.nlp_chn(item).iter_tokens())[0].to_dict()[0]['upos'] for item in replace_words ]
                                 
-                                replace_words_pos = [self.splicing_data.stanza_cache['oov'][item] for item in replace_word_indices]
+                                replace_words_pos = [self.splicing_data.stanza_oov_pos[item] for item in replace_words]
+                                
+                                if self.splicing_config.configs.replace.stanza_simplify_pos:
+                                    source_pos = [POS_SIMPLIFY_MAPPER.get(item, 'OTHER') for item in source_pos]
+                                    replace_words_pos = [{k: POS_SIMPLIFY_MAPPER.get(v, 'OTHER') for k, v in item.items()} for item in replace_words_pos]
+
+                                replace_words_pos = [pos_determinator(item) for item in replace_words_pos]
+
                                 positions_to_replace_selected = []
                                 vacent_terms = list(zip(positions_to_replace, source_pos))
 
@@ -666,7 +651,8 @@ class CommonPreprocessor(AbsPreprocessor):
                             audio_dictionary_index = self.splicing_data.audio_dictionary_index
                             audio_dictionary_book = self.splicing_data.audio_dictionary_book
 
-                            replace_audio_pos = [audio_dictionary_index[item][np.random.choice(len(audio_dictionary_index[item]), 1)[0]] for item in replace_words]
+
+                            replace_audio_pos = [audio_dictionary_index[item.lower()][np.random.choice(len(audio_dictionary_index[item.lower()]), 1)[0]] for item in replace_words]
                             replace_audios = []
                             for audio_pos in replace_audio_pos:
                                 utt_feature_path = audio_dictionary_book[audio_pos['uttid']]
