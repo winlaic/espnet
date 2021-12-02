@@ -62,6 +62,8 @@ bpe_input_sentence_size=100000000 # Size of input sentence for BPE.
 bpe_nlsyms=         # non-linguistic symbols list, separated by a comma, for BPE
 bpe_char_cover=1.0  # character coverage when modeling BPE
 huggingface_tokenizer_file=
+pasm_tokenizer_subwords_file=
+pasm_tokenizer_additional_words_file=
 
 # Ngram model related
 use_ngram=false
@@ -239,7 +241,7 @@ if [ $# -ne 0 ]; then
     exit 2
 fi
 
-. ./path.sh
+# . ./path.sh
 . ./cmd.sh
 
 
@@ -289,7 +291,6 @@ wordtoken_list="${token_listdir}"/word/tokens.txt
 
 if [ "${token_type}" = bpe ]; then
     token_list="${bpetoken_list}"
-    huggingface_tokenizer_file=none
 elif [ "${token_type}" = char ]; then
     token_list="${chartoken_list}"
     bpemodel=none
@@ -303,6 +304,13 @@ elif [ "${token_type}" = huggingface ]; then
     bpemodel=none
     huggingface_tokenizer_file_name=${huggingface_tokenizer_file##*/}
     huggingface_tokenizer_file_stem=${huggingface_tokenizer_file_name%%.*}
+
+elif [ "${token_type}" == pasm ]; then
+    token_list="${pasm_tokenizer_subwords_file%.*}.token_list"
+    bpemodel=none
+    pasm_tokenizer_subwords_file_name=${pasm_tokenizer_subwords_file##*/}
+    pasm_tokenizer_subwords_file_stem=${pasm_tokenizer_subwords_file_name%%.*}
+
 else
     log "Error: not supported --token_type '${token_type}'"
     exit 2
@@ -336,6 +344,9 @@ if [ -z "${asr_tag}" ]; then
     fi
     if [ "${token_type}" = huggingface ]; then
         asr_tag+="_${huggingface_tokenizer_file_stem}"
+    fi
+    if [ "${token_type}" = pasm ]; then
+        asr_tag+="_${pasm_tokenizer_subwords_file_stem}"
     fi
     # Add overwritten arg's info
     if [ -n "${asr_args}" ]; then
@@ -377,6 +388,9 @@ if [ -z "${asr_stats_dir}" ]; then
     fi
     if [ "${token_type}" = huggingface ]; then
         asr_stats_dir+="_${huggingface_tokenizer_file_stem}"
+    fi
+    if [ "${token_type}" = pasm ]; then
+        asr_stats_dir+="_${pasm_tokenizer_subwords_file_stem}"
     fi
     if [ -n "${speed_perturb_factors}" ]; then
         asr_stats_dir+="_sp"
@@ -675,6 +689,8 @@ if ! "${skip_data_prep}"; then
                 --add_symbol "${sos_eos}:-1"
         elif [ "${token_type}" = huggingface ]; then
             log "Stage 5: Using huggingface tokenizer from $huggingface_tokenizer_file_stem."
+        elif [ "${token_type}" = pasm ]; then
+            log "Stage 5: Using huggingface tokenizer from $pasm_tokenizer_subwords_file_stem."
         else
             log "Error: not supported --token_type '${token_type}'"
             exit 2
@@ -967,6 +983,8 @@ if ! "${skip_train}"; then
                 --bpemodel "${bpemodel}" \
                 --token_type "${token_type}" \
                 --huggingface_tokenizer_file "${huggingface_tokenizer_file}" \
+                --pasm_tokenizer_subwords_file "${pasm_tokenizer_subwords_file}" \
+                --pasm_tokenizer_additional_words_file "${pasm_tokenizer_additional_words_file}" \
                 --token_list "${token_list}" \
                 --non_linguistic_symbols "${nlsyms_txt}" \
                 --cleaner "${cleaner}" \
@@ -1095,6 +1113,8 @@ if ! "${skip_train}"; then
                 --token_type "${token_type}" \
                 --token_list "${token_list}" \
                 --huggingface_tokenizer_file "${huggingface_tokenizer_file}" \
+                --pasm_tokenizer_subwords_file "${pasm_tokenizer_subwords_file}" \
+                --pasm_tokenizer_additional_words_file "${pasm_tokenizer_additional_words_file}" \
                 --non_linguistic_symbols "${nlsyms_txt}" \
                 --cleaner "${cleaner}" \
                 --g2p "${g2p}" \
@@ -1224,6 +1244,7 @@ if ! "${skip_eval}"; then
                     --batch_size ${batch_size} \
                     --ngpu "${_ngpu}" \
                     --data_path_and_name_and_type "${_data}/${_scp},speech,${_type}" \
+                    --huggingface_tokenizer_file "${huggingface_tokenizer_file}" \
                     --key_file "${_logdir}"/keys.JOB.scp \
                     --asr_train_config "${asr_exp}"/config.yaml \
                     --asr_model_file "${asr_exp}"/"${inference_asr_model}" \
