@@ -10,6 +10,7 @@ from espnet2.text.phoneme_tokenizer import PhonemeTokenizer
 from espnet2.text.sentencepiece_tokenizer import SentencepiecesTokenizer
 from espnet2.text.word_tokenizer import WordTokenizer
 from espnet2.text.huggingface_tokenizer import HuggingFaceTokenizer
+from espnet2.text.pasm_tokenizer import PASMTokenizer
 
 
 def build_tokenizer(
@@ -21,6 +22,8 @@ def build_tokenizer(
     delimiter: str = None,
     g2p_type: str = None,
     huggingface_tokenizer_file: str = None,
+    pasm_tokenizer_subwords_file: str = None,
+    pasm_tokenizer_additional_words_file: str = None,
 ) -> AbsTokenizer:
     """A helper function to instantiate Tokenizer"""
     assert check_argument_types()
@@ -61,6 +64,11 @@ def build_tokenizer(
     elif token_type == "huggingface":
         return HuggingFaceTokenizer(
             model_file=huggingface_tokenizer_file
+        )
+    elif token_type == "pasm":
+        return PASMTokenizer(
+            pasm_tokenizer_subwords_file,
+            chinese_token_list=pasm_tokenizer_additional_words_file,
         )
     else:
         raise ValueError(

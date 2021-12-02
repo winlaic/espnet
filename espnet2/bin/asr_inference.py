@@ -24,6 +24,7 @@ from espnet.nets.scorer_interface import BatchScorerInterface
 from espnet.nets.scorers.ctc import CTCPrefixScorer
 from espnet.nets.scorers.length_bonus import LengthBonus
 from espnet.utils.cli_utils import get_commandline_args
+from espnet2.asr.frontend import default
 from espnet2.fileio.datadir_writer import DatadirWriter
 from espnet2.tasks.asr import ASRTask
 from espnet2.tasks.lm import LMTask
@@ -60,6 +61,8 @@ class Speech2Text:
         token_type: str = None,
         bpemodel: str = None,
         huggingface_tokenizer_file: str = None,
+        pasm_tokenizer_subwords_file: str = None,
+        pasm_tokenizer_additional_words_file: str = None,
         device: str = "cpu",
         maxlenratio: float = 0.0,
         minlenratio: float = 0.0,
@@ -166,10 +169,16 @@ class Speech2Text:
         if huggingface_tokenizer_file is None:
             huggingface_tokenizer_file = asr_train_args.huggingface_tokenizer_file
 
+        if pasm_tokenizer_subwords_file is None:
+            pasm_tokenizer_subwords_file = asr_train_args.pasm_tokenizer_subwords_file
+        if pasm_tokenizer_additional_words_file is None:
+            pasm_tokenizer_additional_words_file = asr_train_args.pasm_tokenizer_additional_words_file
+
+        
         if token_type is None:
             tokenizer = None
         else:
-            if token_type != 'huggingface':
+            if token_type != 'huggingface' and token_type != 'pasm':
                 if token_type == "bpe":
                     if bpemodel is not None:
                         tokenizer = build_tokenizer(token_type=token_type, bpemodel=bpemodel)
@@ -179,7 +188,11 @@ class Speech2Text:
                     tokenizer = build_tokenizer(token_type=token_type)
                 converter = TokenIDConverter(token_list=token_list)
             else:
-                tokenizer = build_tokenizer(token_type=token_type, huggingface_tokenizer_file=huggingface_tokenizer_file)
+                tokenizer = build_tokenizer(token_type=token_type, 
+                                            huggingface_tokenizer_file=huggingface_tokenizer_file, 
+                                            pasm_tokenizer_subwords_file=pasm_tokenizer_subwords_file,
+                                            pasm_tokenizer_additional_words_file=pasm_tokenizer_additional_words_file,
+                                            )
                 converter = tokenizer
 
         logging.info(f"Text tokenizer: {tokenizer}")
@@ -314,6 +327,8 @@ def inference(
     token_type: Optional[str],
     bpemodel: Optional[str],
     huggingface_tokenizer_file: Optional[str],
+    pasm_tokenizer_subwords_file: Optional[str],
+    pasm_tokenizer_additional_words_file: Optional[str],
     allow_variable_data_keys: bool,
     streaming: bool,
 ):
@@ -348,6 +363,8 @@ def inference(
         token_type=token_type,
         bpemodel=bpemodel,
         huggingface_tokenizer_file=huggingface_tokenizer_file,
+        pasm_tokenizer_subwords_file=pasm_tokenizer_subwords_file,
+        pasm_tokenizer_additional_words_file=pasm_tokenizer_additional_words_file,
         device=device,
         maxlenratio=maxlenratio,
         minlenratio=minlenratio,
@@ -558,6 +575,16 @@ def get_parser():
         '--huggingface_tokenizer_file',
         type=str_or_none,
         default=None
+    )
+    group.add_argument(
+        '--pasm_tokenizer_subwords_file',
+        type=str_or_none,
+        default=None,
+    )
+    group.add_argument(
+        '--pasm_tokenizer_additional_words_file',
+        type=str_or_none,
+        default=None,
     )
 
     return parser

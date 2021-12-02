@@ -26,6 +26,7 @@ import re
 import logging
 from pathlib import Path
 from espnet2.text.huggingface_tokenizer import HuggingFaceTokenizer
+from espnet2.text.pasm_tokenizer import PASMTokenizer
 
 # About UPOS
 # https://universaldependencies.org/u/pos/
@@ -397,6 +398,8 @@ class CommonPreprocessor(AbsPreprocessor):
         non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
         delimiter: str = None,
         huggingface_tokenizer_file: str = None,
+        pasm_tokenizer_subwords_file: str = None,
+        pasm_tokenizer_additional_words_file: str = None,
         rir_scp: str = None,
         rir_apply_prob: float = 1.0,
         noise_scp: str = None,
@@ -420,7 +423,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 raise ValueError("token_list is required if token_type is not None")
             self.text_cleaner = TextCleaner(text_cleaner)
 
-            if token_type != 'huggingface':
+            if token_type != 'huggingface' and token_type != 'pasm':
 
                 self.tokenizer = build_tokenizer(
                     token_type=token_type,
@@ -437,9 +440,14 @@ class CommonPreprocessor(AbsPreprocessor):
             else:
                 self.tokenizer = build_tokenizer(
                     token_type=token_type,
-                    huggingface_tokenizer_file=huggingface_tokenizer_file
+                    huggingface_tokenizer_file=huggingface_tokenizer_file,
+                    pasm_tokenizer_subwords_file=pasm_tokenizer_subwords_file,
+                    pasm_tokenizer_additional_words_file=pasm_tokenizer_additional_words_file,
                 )
                 self.token_id_converter = self.tokenizer
+                if token_type == 'pasm':
+                    assert token_list == list(self.tokenizer.tokens.keys())
+
         else:
             self.text_cleaner = None
             self.tokenizer = None
@@ -568,7 +576,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 if hasattr(self.splicing_data, 'bpe_model') and (self.splicing_data.bpe_model is not None):
                     squeezed_text = ENGLISH_WORD_PATTERN.sub(lambda x: self.splicing_data.bpe_model.DecodePieces(x[0].split(' ')), text)
                     squeezed_text = CHINESE_SPACE_PATTERN.sub('', squeezed_text)
-                elif isinstance(self.tokenizer, HuggingFaceTokenizer):
+                elif isinstance(self.tokenizer, (HuggingFaceTokenizer, PASMTokenizer)):
                     squeezed_text = CHINESE_SPACE_PATTERN.sub('', text)
                 else:
                     raise NotImplementedError
@@ -669,7 +677,7 @@ class CommonPreprocessor(AbsPreprocessor):
                             speech = speech_chunk.speech
                             words = [item.upper() for item in speech_chunk.words if len(item) > 0]
 
-                            if not isinstance(self.tokenizer, HuggingFaceTokenizer):
+                            if not isinstance(self.tokenizer, (HuggingFaceTokenizer, PASMTokenizer)):
                                 words = list(map(self.splicing_data.spm_encode_english, words))
                                 text = ' '.join(words)
                                 text = CHINESE_SPACE_PATTERN.sub('', text)

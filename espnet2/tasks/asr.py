@@ -257,13 +257,22 @@ class ASRTask(AbsTask):
             "--token_type",
             type=str,
             default="bpe",
-            choices=["bpe", "char", "word", "phn", "huggingface"],
+            choices=["bpe", "char", "word", "phn", "huggingface", "pasm"],
             help="The text will be tokenized " "in the specified level token",
         )
         group.add_argument(
             '--huggingface_tokenizer_file',
             type=str_or_none,
         )
+        group.add_argument(
+            '--pasm_tokenizer_subwords_file',
+            type=str_or_none,
+        )
+        group.add_argument(
+            '--pasm_tokenizer_additional_words_file',
+            type=str_or_none,
+        )
+
         group.add_argument(
             "--bpemodel",
             type=str_or_none,
@@ -365,6 +374,8 @@ class ASRTask(AbsTask):
                 token_type=args.token_type,
                 token_list=args.token_list,
                 huggingface_tokenizer_file=args.huggingface_tokenizer_file,
+                pasm_tokenizer_subwords_file=args.pasm_tokenizer_subwords_file,
+                pasm_tokenizer_additional_words_file=args.pasm_tokenizer_additional_words_file,
                 bpemodel=args.bpemodel,
                 non_linguistic_symbols=args.non_linguistic_symbols,
                 text_cleaner=args.cleaner,
