@@ -586,8 +586,8 @@ class CommonPreprocessor(AbsPreprocessor):
                 if 'replace' in self.splicing_config['configs']:
                     replace_configs = self.splicing_config['configs']['replace']
                     
-                    # if np.random.random() < replace_configs['prob']:
-                    if True:
+                    if np.random.random() < replace_configs['prob']:
+                    # if True:
                         words_to_replace = self.splicing_data.words_to_replace
                         if replace_configs['position'] == 'all':
                             positions_to_replace = speech_chunk.non_silence_chunk_indices
