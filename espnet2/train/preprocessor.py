@@ -28,6 +28,8 @@ from pathlib import Path
 from espnet2.text.huggingface_tokenizer import HuggingFaceTokenizer
 from espnet2.text.pasm_tokenizer import PASMTokenizer
 
+from omegaconf import OmegaConf
+
 # About UPOS
 # https://universaldependencies.org/u/pos/
 
@@ -52,7 +54,17 @@ def pos_determinator(all_cased_pos):
     ret = list(sorted_dict(poll, reverse=True).keys())[0]
     return ret
 
-
+def get_sublist_span(orig_list, sublist):
+    assert all(isinstance(item, list) for item in [orig_list, sublist])
+    orig_list = ' '.join(orig_list)
+    sublist_len = len(sublist)
+    sublist = ' '.join(sublist)
+    if orig_list.count(sublist) != 1:
+        return (-1, -1)
+    start = orig_list.find(sublist)
+    head_list = orig_list[:start].strip().split(' ')
+    ret = (len(head_list), len(head_list) + sublist_len)
+    return ret
 
 def kill(key, self):
     align_info = self.splicing_data.source_align_info[key]
@@ -485,74 +497,77 @@ class CommonPreprocessor(AbsPreprocessor):
                 )
         else:
             self.noises = None
-
-        if train and splicing_config is not None:
-            import yaml, json, re, copy
-            import sentencepiece, jieba
-            from espnet2.fileio.read_text import read_2column_text
-            from omegaconf import OmegaConf
-            from types import SimpleNamespace
+        if splicing_config is not None:
             self.splicing_config = OmegaConf.load(splicing_config)
-            self.splicing_data = SimpleNamespace()
-            # with open(splicing_config, 'r', encoding='utf8') as f:
-            #     self.splicing_config = yaml.safe_load(f)
 
-            with Path(self.splicing_config.align_info_json).open('r', encoding='utf8') as f:
-                self.splicing_data.source_align_info = json.load(f)
-
-            
-            with open(self.splicing_config.audio_dictionary_index, 'r', encoding='utf8') as f:
-                self.splicing_data.audio_dictionary_index = json.load(f)
-
-            audio_dictionary_type = self.splicing_config.audio_dictionary_type
-            if audio_dictionary_type == 'kaldi_ark':
-                import kaldiio
-                audio_dictionary_book = read_2column_text(self.splicing_config['audio_dictionary_book'])
-                from os.path import exists
-                assert all(exists(item.split(':')[0]) for item in audio_dictionary_book.values())
-                self.splicing_data.audio_dictionary_book = audio_dictionary_book
-
-
-            elif audio_dictionary_type == 'wav':
-                raise NotImplementedError
-            
-            else:
-                raise NotImplementedError
-
-
-
-            if hasattr(self.splicing_config, 'bpe_model') and (self.splicing_config.bpe_model is not None):
-                self.splicing_data.bpe_model = sentencepiece.SentencePieceProcessor()
-                self.splicing_data.bpe_model.Load(self.splicing_config.bpe_model)
-                self.splicing_data.spm_encode_english = partial(spm_encode_english, model=self.splicing_data.bpe_model)
-            
-            if 'insert' in self.splicing_config.configs:
-
-                insert_configs = self.splicing_config.configs.insert
+            if train or self.splicing_config.splicing_on_valid:
+                if self.splicing_config.splicing_on_valid and not train:
+                    logging.warning('Splicing is enabled when valid.')
                 
-                with Path(insert_configs.words_to_insert).open('r', encoding='utf8') as f:
-                    self.splicing_data.words_to_insert = json.load(f)
+                import yaml, json, re, copy
+                import sentencepiece, jieba
+                from espnet2.fileio.read_text import read_2column_text
+                
+                from types import SimpleNamespace
+                self.splicing_data = SimpleNamespace()
+                # with open(splicing_config, 'r', encoding='utf8') as f:
+                #     self.splicing_config = yaml.safe_load(f)
 
-            if 'replace' in self.splicing_config.configs:
-                replace_configs = self.splicing_config.configs.replace
+                with Path(self.splicing_config.align_info_json).open('r', encoding='utf8') as f:
+                    self.splicing_data.source_align_info = json.load(f)
 
-                with Path(replace_configs['words_to_replace']).open('r', encoding='utf8') as f:
-                    self.splicing_data.words_to_replace = json.load(f)
+                
+                with open(self.splicing_config.audio_dictionary_index, 'r', encoding='utf8') as f:
+                    self.splicing_data.audio_dictionary_index = json.load(f)
 
-            if self.splicing_config.stanza:
-                stanza_train_text_pos = Path(self.splicing_config.stanza_train_text_pos)
-                with stanza_train_text_pos.open('rb') as f:
-                    self.splicing_data.stanza_train_text_pos = json.load(f)
+                audio_dictionary_type = self.splicing_config.audio_dictionary_type
+                if audio_dictionary_type == 'kaldi_ark':
+                    import kaldiio
+                    audio_dictionary_book = read_2column_text(self.splicing_config['audio_dictionary_book'])
+                    from os.path import exists
+                    assert all(exists(item.split(':')[0]) for item in audio_dictionary_book.values())
+                    self.splicing_data.audio_dictionary_book = audio_dictionary_book
 
 
-                stanza_oov_pos = Path(self.splicing_config.stanza_oov_pos)
-                with stanza_oov_pos.open('rb') as f:
-                    self.splicing_data.stanza_oov_pos = json.load(f)
+                elif audio_dictionary_type == 'wav':
+                    raise NotImplementedError
+                
+                else:
+                    raise NotImplementedError
 
 
-        else:
-            self.splicing_config = None
-            self.splicing_data = None
+
+                if hasattr(self.splicing_config, 'bpe_model') and (self.splicing_config.bpe_model is not None):
+                    self.splicing_data.bpe_model = sentencepiece.SentencePieceProcessor()
+                    self.splicing_data.bpe_model.Load(self.splicing_config.bpe_model)
+                    self.splicing_data.spm_encode_english = partial(spm_encode_english, model=self.splicing_data.bpe_model)
+                
+                if 'insert' in self.splicing_config.configs:
+
+                    insert_configs = self.splicing_config.configs.insert
+                    
+                    with Path(insert_configs.words_to_insert).open('r', encoding='utf8') as f:
+                        self.splicing_data.words_to_insert = json.load(f)
+
+                if 'replace' in self.splicing_config.configs:
+                    replace_configs = self.splicing_config.configs.replace
+
+                    with Path(replace_configs['words_to_replace']).open('r', encoding='utf8') as f:
+                        self.splicing_data.words_to_replace = json.load(f)
+
+                if self.splicing_config.stanza:
+                    stanza_train_text_pos = Path(self.splicing_config.stanza_train_text_pos)
+                    with stanza_train_text_pos.open('rb') as f:
+                        self.splicing_data.stanza_train_text_pos = json.load(f)
+
+
+                    stanza_oov_pos = Path(self.splicing_config.stanza_oov_pos)
+                    with stanza_oov_pos.open('rb') as f:
+                        self.splicing_data.stanza_oov_pos = json.load(f)
+
+            else:
+                self.splicing_config = None
+                self.splicing_data = None
 
 
 
@@ -569,6 +584,7 @@ class CommonPreprocessor(AbsPreprocessor):
             align_info = self.splicing_data.source_align_info.get(uid, None)
 
             replaced_positions = []
+            final_replaced_words = []
 
             if align_info is None:
                 logging.warning(f"Utter {uid} has no align info, skipped insertion.")
@@ -673,6 +689,7 @@ class CommonPreprocessor(AbsPreprocessor):
                             for index, audio, word in zip(positions_to_replace_selected, replace_audios, replace_words):
                                 speech_chunk[index] = (audio, word)
                                 replaced_positions.append(speech_chunk.range(index))
+                                final_replaced_words.append(word)
 
                             speech = speech_chunk.speech
                             words = [item.upper() for item in speech_chunk.words if len(item) > 0]
@@ -791,6 +808,13 @@ class CommonPreprocessor(AbsPreprocessor):
             text = data[self.text_name]
             text = self.text_cleaner(text)
             tokens = self.tokenizer.text2tokens(text)
+
+            if self.splicing_config is not None:
+                replaced_words_spans = [get_sublist_span(tokens, self.tokenizer.text2tokens(item)) for item in final_replaced_words]
+                replaced_words_spans = np.array(replaced_words_spans, dtype=np.int64) if replaced_words_spans else np.zeros((0, 2))# T, C
+                data['replaced_words_spans'] = replaced_words_spans
+                # replaced_words_spans = replaced_words_spans.T # C, T
+
             text_ints = self.token_id_converter.tokens2ids(tokens)
             data[self.text_name] = np.array(text_ints, dtype=np.int64)
 

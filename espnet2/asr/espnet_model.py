@@ -64,6 +64,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
+        spliced_att_loss_only: bool = False,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -114,6 +115,7 @@ class ESPnetASRModel(AbsESPnetModel):
             self.error_calculator = None
 
         self.extract_feats_in_collect_stats = extract_feats_in_collect_stats
+        self.spliced_att_loss_only = spliced_att_loss_only
 
     def forward(
         self,
@@ -146,24 +148,50 @@ class ESPnetASRModel(AbsESPnetModel):
 
         
         if self.training and self.adapter is not None:
+            from espnet2.tasks.asr import TransformerAdapter, LinearAdapter
             kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
             _batch_size, _time, _feat_dim = speech.shape
-            abs_scatter_pos = []
-            for i, rgs in enumerate(kwargs['replaced_positions']):
-                for rg in rgs:
-                    if rg[1] - rg[0] != 0:
-                        abs_scatter_pos.extend(list(range(i*_time + rg[0], i*_time + rg[1])))
-            speech = speech.view(-1, _feat_dim)
-            replaced_speech = speech[abs_scatter_pos]
-            replaced_speech = self.adapter(replaced_speech)
-            speech[abs_scatter_pos] = replaced_speech
-            speech = speech.view(_batch_size, _time, _feat_dim)
-            # for i, rgs in enumerate(kwargs['replaced_positions']):
-            #     for rg in rgs:
-            #         if rg[1] - rg[0] != 0:
-            #             speech[i, rg[0]:rg[1], :] = self.adapter(speech[i, rg[0]:rg[1]])
+            if isinstance(self.adapter, LinearAdapter):
+                abs_scatter_pos = []
+                for i, rgs in enumerate(kwargs['replaced_positions']):
+                    for rg in rgs:
+                        if rg[1] - rg[0] != 0:
+                            abs_scatter_pos.extend(list(range(i*_time + rg[0], i*_time + rg[1])))
+                speech = speech.view(-1, _feat_dim)
+                replaced_speech = speech[abs_scatter_pos]
+                replaced_speech = self.adapter(replaced_speech)
+                speech[abs_scatter_pos] = replaced_speech
+                speech = speech.view(_batch_size, _time, _feat_dim)
 
+            elif isinstance(self.adapter, TransformerAdapter):
+                spliced_speech_batch = []
+                abs_scatter_pos = []
+                for i, rgs in enumerate(kwargs['replaced_positions']):
+                        for rg in rgs:
+                            if rg[1] - rg[0] != 0:
+                                abs_scatter_pos.append(list(range(i*_time + rg[0], i*_time + rg[1])))
+                sp_len = list(len(item) for item in abs_scatter_pos)
+                max_sp_len = max(sp_len)
+                speech = speech.view(-1, _feat_dim)
+                spliced_speech_batch = speech.new_zeros((len(abs_scatter_pos), max_sp_len, speech.shape[1]))
+                for i, asp in enumerate(abs_scatter_pos):
+                    spliced_speech_batch[i, :len(asp), :] = speech[asp]
+                spliced_speech_batch, o_sp_len = self.adapter(spliced_speech_batch, torch.LongTensor(sp_len))
+                transformed_idx = [list(range(i * max_sp_len, i * max_sp_len + o_sp_len[i])) for i in range(len(o_sp_len))]
+                transformed_idx = [iitem for item in transformed_idx for iitem in item]
+                abs_scatter_pos_ = [iitem for item in abs_scatter_pos for iitem in item]
+                spliced_speech_batch = spliced_speech_batch.view(-1, _feat_dim)
+                speech[abs_scatter_pos_] = spliced_speech_batch[transformed_idx]
+                speech = speech.view(_batch_size, _time, _feat_dim)
 
+        if self.spliced_att_loss_only:
+            ys_out_mask = speech.new_zeros(len(text_lengths), max(text_lengths) + 1, dtype=bool)
+            for bt, span in enumerate(kwargs['replaced_words_spans'].long()):
+                for s in span:
+                    if s[1] - s[0] != 0:
+                        ys_out_mask[bt, s[0]: s[1]] = True
+        else:
+            ys_out_mask = None
 
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
@@ -173,7 +201,8 @@ class ESPnetASRModel(AbsESPnetModel):
             loss_att, acc_att, cer_att, wer_att = None, None, None, None
         else:
             loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                encoder_out, encoder_out_lens, text, text_lengths
+                encoder_out, encoder_out_lens, text, text_lengths,
+                ys_out_mask=ys_out_mask
             )
 
         # 2b. CTC branch
@@ -300,9 +329,13 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        ys_out_mask: torch.Tensor = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
+
+        if ys_out_mask is not None:
+            ys_out_pad = ys_out_pad.masked_fill(~ys_out_mask, self.ignore_id)
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(

@@ -158,10 +158,27 @@ class LinearAdapter(torch.nn.Module):
     def forward(self, x):
         return self.linear(x)
 
+    @property
+    def requires_context(self):
+        return False
+
+class TransformerAdapter(torch.nn.Module):
+    def __init__(self, final_output_size, **kwargs):
+        super().__init__()
+        self.encoder = TransformerEncoder(**kwargs)
+        self.linear = torch.nn.Linear(in_features=kwargs['output_size'], out_features=final_output_size)
+
+    def forward(self, x: torch.Tensor, ilens):
+        # ilens = x.new_ones(x.shape[0], dtype=torch.int64) * x.shape[1]
+        x, olens, _ = self.encoder(x, ilens)
+        x = self.linear(x)
+        return x, olens
+
 adapter_choices = ClassChoices(
     "adapter",
     classes=dict(
-        linear=LinearAdapter
+        linear=LinearAdapter,
+        transformer=TransformerAdapter,
     ),
     default=None
 )
