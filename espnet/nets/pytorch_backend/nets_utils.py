@@ -61,7 +61,7 @@ def pad_list(xs, pad_value):
     return pad
 
 
-def make_pad_mask(lengths, xs=None, length_dim=-1):
+def make_pad_mask(lengths, xs=None, length_dim=-1, max_len=None):
     """Make mask tensor containing indices of padded part.
 
     Args:
@@ -154,7 +154,10 @@ def make_pad_mask(lengths, xs=None, length_dim=-1):
         lengths = lengths.tolist()
     bs = int(len(lengths))
     if xs is None:
-        maxlen = int(max(lengths))
+        if max_len is None:
+            maxlen = int(max(lengths))
+        else:
+            maxlen = max_len
     else:
         maxlen = xs.size(length_dim)
 

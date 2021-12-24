@@ -184,7 +184,7 @@ class TransformerEncoder(AbsEncoder):
         Returns:
             position embedded tensor and mask
         """
-        masks = (~make_pad_mask(ilens)[:, None, :]).to(xs_pad.device)
+        masks = (~make_pad_mask(ilens, max_len=xs_pad.shape[1])[:, None, :]).to(xs_pad.device)
 
         if (
             isinstance(self.embed, Conv2dSubsampling)
@@ -205,7 +205,12 @@ class TransformerEncoder(AbsEncoder):
             xs_pad = self.embed(xs_pad, xs_class)
         else:
             xs_pad = self.embed(xs_pad)
-        xs_pad, masks = self.encoders(xs_pad, masks)
+        try:
+            xs_pad, masks = self.encoders(xs_pad, masks)
+        except RuntimeError:
+            print(xs_pad.shape)
+            print(masks.shape)
+            import sys; sys.exit(1)
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
 

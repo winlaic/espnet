@@ -569,7 +569,8 @@ class CommonPreprocessor(AbsPreprocessor):
                 self.splicing_config = None
                 self.splicing_data = None
 
-
+        else:
+            self.splicing_config = None
 
     def __call__(
         self, uid: str, data: Dict[str, Union[str, np.ndarray]]

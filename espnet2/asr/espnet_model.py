@@ -16,7 +16,7 @@ from espnet.nets.e2e_asr_common import ErrorCalculator
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.transformer.add_sos_eos import add_sos_eos
 from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import (
-    LabelSmoothingLoss,  # noqa: H301
+    LabelSmoothingLoss, PartialLabelSmoothingLoss,  # noqa: H301
 )
 from espnet2.asr.ctc import CTC
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
@@ -28,6 +28,8 @@ from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
+
+import random
 
 if LooseVersion(torch.__version__) >= LooseVersion("1.6.0"):
     from torch.cuda.amp import autocast
@@ -65,6 +67,8 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
         spliced_att_loss_only: bool = False,
+        spliced_token_special_treat: bool = False,
+        smoothing_boost: float = 2.0,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -98,12 +102,25 @@ class ESPnetASRModel(AbsESPnetModel):
         else:
             self.ctc = ctc
         self.rnnt_decoder = rnnt_decoder
-        self.criterion_att = LabelSmoothingLoss(
+
+        # self.criterion_att = LabelSmoothingLoss(
+        #     size=vocab_size,
+        #     padding_idx=ignore_id,
+        #     smoothing=lsm_weight,
+        #     normalize_length=length_normalized_loss,
+        # )
+
+        self.criterion_att = PartialLabelSmoothingLoss(
             size=vocab_size,
             padding_idx=ignore_id,
             smoothing=lsm_weight,
+            smoothing_boost=smoothing_boost,
             normalize_length=length_normalized_loss,
         )
+
+        self.spliced_token_special_treat = spliced_token_special_treat
+
+        assert not spliced_att_loss_only
 
         self.adapter = adapter
 
@@ -148,10 +165,10 @@ class ESPnetASRModel(AbsESPnetModel):
 
         
         if self.training and self.adapter is not None:
-            from espnet2.tasks.asr import TransformerAdapter, LinearAdapter
-            kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
+            from espnet2.tasks.asr import TransformerAdapter, LinearAdapter, ContextedTransformerAdapter
             _batch_size, _time, _feat_dim = speech.shape
             if isinstance(self.adapter, LinearAdapter):
+                kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
                 abs_scatter_pos = []
                 for i, rgs in enumerate(kwargs['replaced_positions']):
                     for rg in rgs:
@@ -164,6 +181,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 speech = speech.view(_batch_size, _time, _feat_dim)
 
             elif isinstance(self.adapter, TransformerAdapter):
+                kwargs['replaced_positions'] = kwargs['replaced_positions'].int().tolist()
                 spliced_speech_batch = []
                 abs_scatter_pos = []
                 for i, rgs in enumerate(kwargs['replaced_positions']):
@@ -184,14 +202,45 @@ class ESPnetASRModel(AbsESPnetModel):
                 speech[abs_scatter_pos_] = spliced_speech_batch[transformed_idx]
                 speech = speech.view(_batch_size, _time, _feat_dim)
 
-        if self.spliced_att_loss_only:
-            ys_out_mask = speech.new_zeros(len(text_lengths), max(text_lengths) + 1, dtype=bool)
+            elif isinstance(self.adapter, ContextedTransformerAdapter):
+                kwargs['replaced_positions'] = kwargs['replaced_positions'].long() # B N [start, end]
+                if random.random() <= self.adapter.perform_prob:
+                    with torch.no_grad():
+                        performed_replace = (kwargs['replaced_positions'][:, :, 1] - kwargs['replaced_positions'][:, :, 0] != 0).any(dim=-1)
+                        if any(performed_replace):
+                            performed_replaced_speech = speech[performed_replace]
+                            performed_replaced_speech_lengths = speech_lengths[performed_replace]
+                            performed_replaced_speech_splicing_mask = performed_replaced_speech.new_zeros(list(performed_replaced_speech.shape)[:2], dtype=torch.long)
+                            performed_replaced_replaced_positions = kwargs['replaced_positions'][performed_replace]
+                            for i, splice_ranges in enumerate(performed_replaced_replaced_positions):
+                                for s, e in splice_ranges:
+                                    performed_replaced_speech_splicing_mask[i, s: e] = 1
+                            
+                            adapted_splices = self.adapter(performed_replaced_speech, performed_replaced_speech_lengths, performed_replaced_speech_splicing_mask)
+
+                            for i, (i_outer, splice_ranges) in enumerate(zip(torch.where(performed_replace)[0], performed_replaced_replaced_positions)):
+                                for s, e in splice_ranges:
+                                    speech[i_outer, s: e, :] = adapted_splices[i, s:e, :]
+
+
+        # if self.spliced_att_loss_only:
+        #     ys_out_mask = speech.new_zeros(len(text_lengths), max(text_lengths) + 1, dtype=bool)
+        #     for bt, span in enumerate(kwargs['replaced_words_spans'].long()):
+        #         for s in span:
+        #             if s[1] - s[0] != 0:
+        #                 ys_out_mask[bt, s[0]: s[1]] = True
+        # else:
+        #     ys_out_mask = None
+
+        if self.spliced_token_special_treat and self.training:
+            is_special_target_mask = speech.new_zeros(len(text_lengths), max(text_lengths) + 1, dtype=bool) # +1 for teacher forcing.
             for bt, span in enumerate(kwargs['replaced_words_spans'].long()):
                 for s in span:
                     if s[1] - s[0] != 0:
-                        ys_out_mask[bt, s[0]: s[1]] = True
+                        is_special_target_mask[bt, s[0]: s[1]] = True
         else:
-            ys_out_mask = None
+            is_special_target_mask = None
+
 
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
@@ -202,7 +251,7 @@ class ESPnetASRModel(AbsESPnetModel):
         else:
             loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
                 encoder_out, encoder_out_lens, text, text_lengths,
-                ys_out_mask=ys_out_mask
+                is_special_target_mask=is_special_target_mask
             )
 
         # 2b. CTC branch
@@ -330,12 +379,13 @@ class ESPnetASRModel(AbsESPnetModel):
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
         ys_out_mask: torch.Tensor = None,
+        is_special_target_mask: torch.Tensor = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
 
-        if ys_out_mask is not None:
-            ys_out_pad = ys_out_pad.masked_fill(~ys_out_mask, self.ignore_id)
+        # if ys_out_mask is not None:
+        #     ys_out_pad = ys_out_pad.masked_fill(~ys_out_mask, self.ignore_id)
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
@@ -343,7 +393,7 @@ class ESPnetASRModel(AbsESPnetModel):
         )
 
         # 2. Compute attention loss
-        loss_att = self.criterion_att(decoder_out, ys_out_pad)
+        loss_att = self.criterion_att(decoder_out, ys_out_pad, is_special_target_mask=is_special_target_mask)
         acc_att = th_accuracy(
             decoder_out.view(-1, self.vocab_size),
             ys_out_pad,

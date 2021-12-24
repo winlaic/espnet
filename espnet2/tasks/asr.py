@@ -68,6 +68,8 @@ from espnet2.utils.types import int_or_none
 from espnet2.utils.types import str2bool
 from espnet2.utils.types import str_or_none
 
+from espnet.nets.pytorch_backend.transformer.embedding import ClassAndPositionalEncoding
+
 frontend_choices = ClassChoices(
     name="frontend",
     classes=dict(
@@ -174,18 +176,36 @@ class TransformerAdapter(torch.nn.Module):
         x = self.linear(x)
         return x, olens
 
+
+class ContextedTransformerAdapter(torch.nn.Module):
+    def __init__(self, model_path, perform_prob):
+        super().__init__()
+        self.transformer_model = TransformerEncoder(
+            input_size=83, output_size=256, input_layer='linear', pos_enc_class=ClassAndPositionalEncoding
+        )
+        self.output_linear = torch.nn.Linear(256, 83)
+        self.perform_prob = perform_prob
+        state_dict = torch.load(model_path, map_location='cpu')['state_dict']
+        self.load_state_dict(state_dict=state_dict)
+        logging.warning(f"{self.__class__.__name__} is initialized from {model_path}.")
+
+    def forward(self, spliced_speeches, spliced_speeches_lens, xs_class):
+        assert list(spliced_speeches.shape)[:2] == list(xs_class.shape), (spliced_speeches.shape, xs_class.shape)
+        assert spliced_speeches.shape[0] == spliced_speeches_lens.shape[0], (spliced_speeches.shape, spliced_speeches_lens.shape)
+        x, olens, _ = self.transformer_model(spliced_speeches, spliced_speeches_lens, xs_class=xs_class)
+        x = self.output_linear(x)
+        return x
+
+
 adapter_choices = ClassChoices(
     "adapter",
     classes=dict(
         linear=LinearAdapter,
         transformer=TransformerAdapter,
+        contexted_transformer=ContextedTransformerAdapter,
     ),
     default=None
 )
-
-
-
-
 
 class ASRTask(AbsTask):
     # If you need more than one optimizers, change this value
