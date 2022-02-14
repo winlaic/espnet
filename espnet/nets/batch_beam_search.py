@@ -282,7 +282,7 @@ class BatchBeamSearch(BeamSearch):
             dtype=x.dtype, device=x.device
         ).unsqueeze(1)
 
-        show_current_scores(scores, part_scores, weighted_scores, self.token_list, 20)
+        # show_current_scores(scores, part_scores, weighted_scores, self.token_list, 20)
         
         # TODO(karita): do not use list. use batch instead
         # see also https://github.com/espnet/espnet/pull/1402#discussion_r354561029

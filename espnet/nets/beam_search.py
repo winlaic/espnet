@@ -406,7 +406,7 @@ class BeamSearch(torch.nn.Module):
         if self.token_list is not None:
             logging.info(
                 "best hypo: "
-                + "".join([self.token_list[x] for x in best.yseq[1:-1]])
+                + " ".join([self.token_list[x] for x in best.yseq[1:-1]])
                 + "\n"
             )
         return nbest_hyps
